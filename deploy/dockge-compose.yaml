@@ -64,11 +64,17 @@ services:
       TZ: Europe/Oslo
     volumes:
       - /mnt/bigdisk/ps2:/ps2
-    command: >
-      -s "PS2;/ps2;yes;no;yes"
-      -g "server min protocol = NT1"
-      -g "client min protocol = NT1"
-      -g "ntlm auth = yes"
+    # Explicit list form: each flag and its (space-containing) value is a separate
+    # item, so nothing depends on how the runtime word-splits a single string.
+    command:
+      - "-s"
+      - "PS2;/ps2;yes;no;yes"          # share PS2 -> /ps2, writable, guest ok (no -p)
+      - "-g"
+      - "server min protocol = NT1"    # OPL's SMB client is ancient — force SMB1/NT1
+      - "-g"
+      - "client min protocol = NT1"
+      - "-g"
+      - "ntlm auth = yes"
 
   # Own tailnet device -> ps2sync.tailcd7b6f.ts.net
   tailscale-ps2sync:
