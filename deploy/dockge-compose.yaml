@@ -1,0 +1,90 @@
+# Dockge stack for the homelab (full wiring: ps2sync + Samba for OPL + Tailscale
+# sidecar on the `web` network). Put this at /opt/stacks/ps2sync/compose.yaml on
+# the box. For a plain local run instead, use ../docker-compose.yml.
+#
+# How it fits together: ps2sync only INGESTS, converts (PS1 .bin/.cue -> .VCD) and
+# ORGANIZES files under /mnt/bigdisk/ps2 (DVD/ CD/ POPS/). It never pushes to the
+# console. The PS2 running Open PS2 Loader PULLS games from the ps2-samba share
+# over SMB on the LAN — so both containers bind-mount the SAME host directory.
+#
+# Prerequisites:
+#   1. CI has pushed ghcr.io/sindrevatnaland/ps2sync:latest (private image).
+#   2. On the box: docker login ghcr.io -u SindreVatnaland   (PAT with read:packages).
+#   3. .env alongside this file:  TS_AUTHKEY=tskey-auth-…  (reusable key).
+#   4. Data lives on the ext4 storage drive mounted at /mnt/bigdisk (images can be
+#      large; ext4 avoids FAT32's 4 GB cap and gives real perms for SQLite). The
+#      container runs as uid 1000 and self-heals /data ownership on start, so no
+#      manual chown is needed — BUT the drive must be mounted before the container
+#      starts, or Docker binds an empty dir on the SD. One-time drive setup:
+#        sudo mkfs.ext4 -L bigdisk /dev/sdX1              # ⚠ ERASES the drive
+#        # add to /etc/fstab (nofail) and: sudo mount -a
+#        sudo mkdir -p /mnt/bigdisk/ps2
+#      Verify after deploy: df /mnt/bigdisk/ps2/db/ps2-sync.sqlite -> /dev/sdX1
+#   5. OPL side: on the PS2, set network SMB to this box's LAN IP, share "PS2",
+#      no user/guest. OPL reads DVD/ + CD/; POPStarter reads the .VCD files in POPS/.
+# After deploy:
+#   docker exec tailscale-ps2sync tailscale serve --bg http://ps2sync:8080   # tailnet-only
+#   # or, to expose it publicly on the funnel instead:
+#   # docker exec tailscale-ps2sync tailscale funnel --bg http://ps2sync:8080
+#   Optional Zoraxy host rule: ps2sync.tailcd7b6f.ts.net -> base origin ps2sync:8080.
+
+services:
+  ps2sync:
+    container_name: ps2sync
+    image: ghcr.io/sindrevatnaland/ps2sync:latest
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      TZ: Europe/Oslo
+      # AUTH_TOKEN: ...          # optional shared token for the UI
+    volumes:
+      - /mnt/bigdisk/ps2:/data               # ext4 storage drive: DB + games together
+    networks: [web]
+    labels:
+      homelab.name: "PS2 Sync"
+      homelab.url: https://ps2sync.tailcd7b6f.ts.net/
+      homelab.desc: "Ingest & organize PS1/PS2 images for OPL (the PS2 pulls over SMB)"
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # SMB share the PS2 (Open PS2 Loader) mounts over the LAN. Serves the SAME host
+  # dir ps2sync organizes. OPL's SMB client is ancient, so force SMB1/NT1 + NTLM;
+  # -s "share;path;browse;readonly;guest" exposes /ps2 as writable guest share PS2.
+  # NB: no -p. dperson/samba's -p chowns /ps2 to smbuser (uid 100) and forces 775/664
+  # on startup, which would steal ownership from ps2sync (uid 1000) on any restart and
+  # break ingest with EACCES. ps2sync's entrypoint already self-heals /data ownership
+  # to node and writes world-readable files (644/755), so OPL guest reads still work.
+  ps2-samba:
+    container_name: ps2-samba
+    image: dperson/samba
+    restart: unless-stopped
+    ports:
+      - "139:139"
+      - "445:445"
+    environment:
+      TZ: Europe/Oslo
+    volumes:
+      - /mnt/bigdisk/ps2:/ps2
+    command: >
+      -s "PS2;/ps2;yes;no;yes"
+      -g "server min protocol = NT1"
+      -g "client min protocol = NT1"
+      -g "ntlm auth = yes"
+
+  # Own tailnet device -> ps2sync.tailcd7b6f.ts.net
+  tailscale-ps2sync:
+    image: tailscale/tailscale:latest
+    container_name: tailscale-ps2sync
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_HOSTNAME: ps2sync
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+    volumes: [ts_ps2sync_state:/var/lib/tailscale]
+    networks: [web]
+
+networks:
+  web: { external: true, name: web }
+
+volumes:
+  ts_ps2sync_state: null

@@ -1,0 +1,32 @@
+# Standalone / local run of ps2sync (single container). `docker compose up -d`.
+# For the homelab deploy (Samba for OPL + Tailscale sidecar + `web` network) use
+# deploy/dockge-compose.yaml instead — do not add those sidecars here.
+
+services:
+  ps2sync:
+    build: .
+    container_name: ps2sync
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      # No required vars — everything falls back to the defaults baked into
+      # src/config.ts, so uncomment only to override.
+      TZ: "Europe/Oslo"
+      # DATA_DIR: "/data"
+      # PORT: "8080"
+      # MAX_UPLOAD_BYTES: "12884901888"      # 12 GiB (fits a PS2 DVD9)
+      # MAX_DOWNLOAD_BYTES: "10737418240"    # 10 GiB
+      # ALLOW_PRIVATE_URL_HOSTS: "false"
+      # AUTH_TOKEN: ""                        # set to require a bearer token / login cookie
+      # LOG_LEVEL: "info"
+    healthcheck:
+      # ponytail: node's global fetch instead of adding curl/wget to the image.
+      # Upgrade path: switch to `curl -f` if the runtime ever ships curl anyway.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

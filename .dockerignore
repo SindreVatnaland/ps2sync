@@ -1,0 +1,17 @@
+# Keep the build context small and secrets/host artefacts out of it.
+# Host node_modules/dist matter most: they hold arch-specific native binaries.
+# NOTE: do NOT add "Dockerfile" here — ignoring it makes `docker build` fail to
+# find it. wii-sync learned that the hard way.
+node_modules
+dist
+.git
+.gitignore
+data
+/data
+*.sqlite
+*.sqlite-*
+.env
+.env.*
+!.env.example
+.DS_Store
+npm-debug.log*
