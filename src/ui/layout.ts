@@ -55,7 +55,9 @@ header.nav{
   display:flex;flex-wrap:wrap;align-items:center;gap:.25rem;
   padding:.6rem 1rem;
 }
-header.nav .brand{font-weight:700;margin-right:1rem}
+header.nav .brand{font-weight:700;margin-right:1rem;display:inline-flex;align-items:center;gap:.4em;color:var(--fg)}
+header.nav .brand:hover{text-decoration:none}
+header.nav .brand svg{height:1.2em;width:1.2em}
 header.nav a.navlink{padding:.4rem .7rem;border-radius:6px;color:var(--fg)}
 header.nav a.navlink:hover{background:var(--panel2);text-decoration:none}
 header.nav a.navlink.active{background:var(--accent);color:var(--accent-fg)}
@@ -118,6 +120,12 @@ code{background:var(--panel2);padding:.1rem .35rem;border-radius:4px;font-size:.
 @keyframes spin{to{transform:rotate(360deg)}}
 `;
 
+// Inline SVG brand mark (PlayStation face-button symbols) — reused as the favicon
+// and the nav brand icon, so there's no static file or extra request.
+const ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#1b3fae"/><path d="M16 7 19.5 13 12.5 13Z" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/><circle cx="24" cy="16" r="3.2" fill="none" stroke="#fff" stroke-width="1.7"/><path d="M13 20 19 26M19 20 13 26" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><rect x="5" y="13" width="6" height="6" rx="1" fill="none" stroke="#fff" stroke-width="1.7"/></svg>';
+const FAVICON = 'data:image/svg+xml,' + encodeURIComponent(ICON);
+
 export function renderPage(title: string, activeNav: string, bodyHtml: string): string {
   const nav = NAV.map(
     (n) =>
@@ -131,11 +139,12 @@ export function renderPage(title: string, activeNav: string, bodyHtml: string): 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>${escapeHtml(title)} · ps2sync</title>
+<link rel="icon" href="${FAVICON}">
 <style>${STYLE}</style>
 </head>
 <body>
 <header class="nav">
-  <span class="brand">ps2sync</span>
+  <a class="brand" href="/">${ICON}ps2sync</a>
   ${nav}
 </header>
 <main>
