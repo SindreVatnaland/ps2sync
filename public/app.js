@@ -223,6 +223,7 @@ function wireUpload() {
       if (xhr.status >= 200 && xhr.status < 400) batchDone++;
       else batchFailed.push(file.name);
       bar.style.width = "0%";
+      if (typeof refreshJobs === "function") refreshJobs(); // show the new job at once
       drain();
     };
     xhr.onerror = function () {
