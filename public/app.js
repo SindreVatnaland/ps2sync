@@ -46,16 +46,21 @@ function consoleLabel(c) {
 function coverCandidates(g) {
   var serial = String(g.serial || "").toUpperCase();
   var out = [];
-  // PS2: serial-keyed covers from xlenore/ps2-covers (via the jsDelivr CDN mirror) —
-  // reliable and exact, since it's keyed by disc serial rather than a fuzzy title.
-  if (g.console === "ps2" && serial) {
+  // Serial-keyed covers from xlenore (via jsDelivr CDN) — reliable & exact by disc
+  // serial. PS1 and PS2 each have their own repo, so a title mismatch (e.g. EU
+  // "Crash Bandicoot 3 - Warped" vs US "Crash Bandicoot - Warped") no longer matters.
+  var repo =
+    g.console === "ps1" ? "psx-covers" : g.console === "ps2" ? "ps2-covers" : "";
+  if (repo && serial) {
     out.push(
-      "https://cdn.jsdelivr.net/gh/xlenore/ps2-covers@main/covers/default/" +
+      "https://cdn.jsdelivr.net/gh/xlenore/" +
+        repo +
+        "@main/covers/default/" +
         encodeURIComponent(serial) +
         ".jpg",
     );
   }
-  // Fallback, and PS1's main source: libretro thumbnails by No-Intro name + region.
+  // Fallback for either console: libretro thumbnails by No-Intro name + region.
   var sys = g.console === "ps1" ? "Sony - PlayStation" : "Sony - PlayStation 2";
   var base =
     "https://thumbnails.libretro.com/" +
