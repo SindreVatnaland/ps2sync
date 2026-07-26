@@ -44,14 +44,24 @@ function consoleLabel(c) {
 // tag is derived from the serial prefix. Returns candidate URLs tried in order via
 // the <img> onerror chain; a full miss just hides the image.
 function coverCandidates(g) {
+  var serial = String(g.serial || "").toUpperCase();
+  var out = [];
+  // PS2: serial-keyed covers from xlenore/ps2-covers (via the jsDelivr CDN mirror) —
+  // reliable and exact, since it's keyed by disc serial rather than a fuzzy title.
+  if (g.console === "ps2" && serial) {
+    out.push(
+      "https://cdn.jsdelivr.net/gh/xlenore/ps2-covers@main/covers/default/" +
+        encodeURIComponent(serial) +
+        ".jpg",
+    );
+  }
+  // Fallback, and PS1's main source: libretro thumbnails by No-Intro name + region.
   var sys = g.console === "ps1" ? "Sony - PlayStation" : "Sony - PlayStation 2";
   var base =
     "https://thumbnails.libretro.com/" +
     encodeURIComponent(sys) +
     "/Named_Boxarts/";
-  var pre = String(g.serial || "")
-    .split("-")[0]
-    .toUpperCase();
+  var pre = serial.split("-")[0];
   var region = /^(SLES|SCES|SLED|SCED|SLEH)/.test(pre)
     ? "Europe"
     : /^(SLPS|SLPM|SCPS|SCAJ|SLKA|SCKA|PCPX|SLAJ)/.test(pre)
@@ -60,14 +70,12 @@ function coverCandidates(g) {
   var regions = [region, "USA", "Europe", "Japan"].filter(function (r, i, a) {
     return a.indexOf(r) === i;
   });
-  var names = [];
   regions.forEach(function (r) {
-    names.push(g.title + " (" + r + ")");
-    if (g.console === "ps1") names.push(g.title + " (" + r + ") (Disc 1)");
+    out.push(base + encodeURIComponent(g.title + " (" + r + ")") + ".png");
+    if (g.console === "ps1")
+      out.push(base + encodeURIComponent(g.title + " (" + r + ") (Disc 1)") + ".png");
   });
-  return names.slice(0, 6).map(function (n) {
-    return base + encodeURIComponent(n) + ".png";
-  });
+  return out.slice(0, 7);
 }
 
 // Cover thumbnails, cached so the 2s jobs refresh doesn't reload/flicker them.
