@@ -546,6 +546,7 @@ function wireSearch() {
   var results = document.getElementById("search-results");
   var status = document.getElementById("search-status");
   var hideDupes = document.getElementById("hide-dupes");
+  var hideDemos = document.getElementById("hide-demos");
   var timer = null,
     seq = 0,
     lastHits = [];
@@ -606,17 +607,30 @@ function wireSearch() {
     }
     return out;
   }
+  // Demo / beta / trial disc: by title marker or by a demo/promo serial prefix.
+  function isDemo(g) {
+    var t = String(g.title || "").toLowerCase();
+    if (/(^|[^a-z])(demo|beta|trial|taikenban|otameshi|tentou)([^a-z]|$)/.test(t))
+      return true;
+    var pre = String(g.serial || "")
+      .split("-")[0]
+      .toUpperCase();
+    return /^(SLED|SCED|PCPX|PAPX|PBPX|TLES|TLUS|TCES|TCUS|TLED)$/.test(pre);
+  }
   function render() {
-    var shown = collapse(lastHits);
+    var hits = lastHits;
+    if (hideDemos && hideDemos.checked)
+      hits = hits.filter(function (g) {
+        return !isDemo(g);
+      });
+    var shown = collapse(hits);
     var hidden = lastHits.length - shown.length;
     status.textContent = shown.length
       ? shown.length +
         " result" +
         (shown.length === 1 ? "" : "s") +
         (lastHits.length >= 60 ? " (first 60 — narrow your search)" : "") +
-        (hidden > 0
-          ? " · " + hidden + " regional dup" + (hidden === 1 ? "" : "s") + " hidden"
-          : "")
+        (hidden > 0 ? " · " + hidden + " hidden" : "")
       : "No matches.";
     results.innerHTML = shown.map(card).join("");
   }
@@ -650,6 +664,17 @@ function wireSearch() {
     hideDupes.addEventListener("change", function () {
       try {
         localStorage.setItem("ps2sync-hide-dupes", hideDupes.checked ? "1" : "0");
+      } catch (e) {
+        /* private mode */
+      }
+      render();
+    });
+  }
+  if (hideDemos) {
+    hideDemos.checked = localStorage.getItem("ps2sync-hide-demos") !== "0"; // default on
+    hideDemos.addEventListener("change", function () {
+      try {
+        localStorage.setItem("ps2sync-hide-demos", hideDemos.checked ? "1" : "0");
       } catch (e) {
         /* private mode */
       }

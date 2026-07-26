@@ -152,6 +152,9 @@ export function searchView(): string {
   <label style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
     <input type="checkbox" id="hide-dupes"> Hide regional duplicates (one entry per title)
   </label>
+  <label style="display:flex;align-items:center;gap:.5rem;margin-top:.35rem">
+    <input type="checkbox" id="hide-demos" checked> Hide demos &amp; betas
+  </label>
   <p class="muted small">Type at least 2 characters.</p>
 </div>
 <div id="search-status" class="muted small"></div>
