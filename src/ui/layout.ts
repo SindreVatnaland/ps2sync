@@ -128,6 +128,10 @@ const ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#1b3fae"/><path d="M16 7 19.5 13 12.5 13Z" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/><circle cx="24" cy="16" r="3.2" fill="none" stroke="#fff" stroke-width="1.7"/><path d="M13 20 19 26M19 20 13 26" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><rect x="5" y="13" width="6" height="6" rx="1" fill="none" stroke="#fff" stroke-width="1.7"/></svg>';
 const FAVICON = 'data:image/svg+xml,' + encodeURIComponent(ICON);
 
+// Bumped on every container start so a redeploy busts the browser's cached app.js
+// (otherwise UI changes only show after a manual hard-refresh).
+const ASSET_VERSION = Date.now();
+
 export function renderPage(title: string, activeNav: string, bodyHtml: string): string {
   const nav = NAV.map(
     (n) =>
@@ -152,7 +156,7 @@ export function renderPage(title: string, activeNav: string, bodyHtml: string): 
 <main>
 ${bodyHtml}
 </main>
-<script src="/static/app.js" defer></script>
+<script src="/static/app.js?v=${ASSET_VERSION}" defer></script>
 </body>
 </html>`;
 }

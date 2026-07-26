@@ -184,6 +184,7 @@ function jobRow(j) {
   return (
     "<tr><td>" +
     coverCell(j.console, j.serial, j.title) +
+    "</td><td>" +
     esc(j.source || "—") +
     "</td><td>" +
     esc(j.kind) +
@@ -217,7 +218,7 @@ async function refreshJobs() {
     var start = jobsPage * JOBS_PER_PAGE;
     tbody.innerHTML = rows.length
       ? rows.slice(start, start + JOBS_PER_PAGE).map(jobRow).join("")
-      : '<tr><td colspan="8" class="muted">No jobs yet. <a href="/add">Add a game.</a></td></tr>';
+      : '<tr><td colspan="9" class="muted">No jobs yet. <a href="/add">Add a game.</a></td></tr>';
     renderJobsPager(rows.length, pages);
     hydrateCovers();
   } catch (e) {

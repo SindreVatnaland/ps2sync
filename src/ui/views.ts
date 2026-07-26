@@ -94,7 +94,6 @@ export function addView(): string {
   return `<h1>Add a game</h1>
 
 <div class="card">
-  <h2>Upload a file</h2>
   <div id="dropzone" class="dropzone">
     <p>Drag &amp; drop one or more disc images here, or <label class="link" for="file-input" style="display:inline">choose files</label>.</p>
     <input id="file-input" type="file" multiple
@@ -103,39 +102,31 @@ export function addView(): string {
       and <code>.zip/.7z/.rar</code> archives.</p>
   </div>
 
-  <label for="target-select" style="margin-top:1rem">Console / media</label>
-  <select id="target-select">
-    <option value="">Auto-detect (recommended)</option>
-    <option value="ps2-dvd">PS2 — DVD (place in DVD/)</option>
-    <option value="ps2-cd">PS2 — CD (place in CD/)</option>
-    <option value="ps1">PS1 — convert to VCD (place in POPS/)</option>
-  </select>
-  <p class="muted small">Auto reads the disc's serial from <code>SYSTEM.CNF</code> to pick the console and
-    folder. PS1 <code>.bin/.cue</code> images are automatically converted to a POPStarter <code>.VCD</code>.</p>
+  <form method="post" action="/url">
+    <label for="target-select" style="margin-top:1rem">Console / media</label>
+    <select id="target-select" name="target">
+      <option value="">Auto-detect (recommended)</option>
+      <option value="ps2-dvd">PS2 — DVD (place in DVD/)</option>
+      <option value="ps2-cd">PS2 — CD (place in CD/)</option>
+      <option value="ps1">PS1 — convert to VCD (place in POPS/)</option>
+    </select>
+    <p class="muted small">Auto reads the disc's serial from <code>SYSTEM.CNF</code> to pick the console and
+      folder. PS1 <code>.bin/.cue</code> images are automatically converted to a POPStarter <code>.VCD</code>.</p>
+
+    <label for="url-input" style="margin-top:1rem">… or paste a direct HTTP(S) link instead of a file</label>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <input id="url-input" type="url" name="url" placeholder="https://example.com/game.iso"
+        style="flex:1;min-width:220px" required>
+      <button class="btn primary" type="submit">Download</button>
+    </div>
+    <p class="muted small">The console/media option above applies to both the file upload and the URL download.</p>
+  </form>
 
   <div id="upload-status" class="hidden">
     <div class="progress"><div id="upload-bar" class="progress-fill"></div></div>
     <p id="upload-text" class="muted small"></p>
   </div>
-</div>
-
-<div class="card">
-  <h2>Add by URL</h2>
-  <form method="post" action="/url">
-    <label for="url-input">Direct HTTP(S) link to a disc image or archive</label>
-    <input id="url-input" type="url" name="url" placeholder="https://example.com/game.iso" required>
-    <label for="url-target" style="margin-top:.75rem">Console / media</label>
-    <select id="url-target" name="target">
-      <option value="">Auto-detect (recommended)</option>
-      <option value="ps2-dvd">PS2 — DVD</option>
-      <option value="ps2-cd">PS2 — CD</option>
-      <option value="ps1">PS1 — convert to VCD</option>
-    </select>
-    <button class="btn primary" type="submit" style="margin-top:1rem">Download</button>
-  </form>
-</div>
-
-<p class="muted small">Uploads and downloads become jobs — watch them on the <a href="/">Library</a> page.</p>`;
+</div>`;
 }
 
 // --- Storage usage (shared /data disk) ---------------------------------------
@@ -174,9 +165,9 @@ export function jobsView(): string {
   </div>
   <div class="table-wrap"><table>
   <thead><tr>
-    <th>Source</th><th>Kind</th><th>Console</th><th>Serial</th><th>State</th><th>Progress</th><th>Info</th><th></th>
+    <th></th><th>Source</th><th>Kind</th><th>Console</th><th>Serial</th><th>State</th><th>Progress</th><th>Info</th><th></th>
   </tr></thead>
-  <tbody id="jobs-tbody"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+  <tbody id="jobs-tbody"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
   </table></div>
   <div id="jobs-pager" style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem"></div>
 </div>`;
