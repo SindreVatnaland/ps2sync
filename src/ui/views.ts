@@ -178,6 +178,7 @@ export function jobsView(): string {
   </tr></thead>
   <tbody id="jobs-tbody"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
   </table></div>
+  <div id="jobs-pager" style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem"></div>
 </div>`;
 }
 

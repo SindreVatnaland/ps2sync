@@ -140,17 +140,50 @@ function jobRow(j) {
   );
 }
 
+var jobsPage = 0;
+var JOBS_PER_PAGE = 5;
+
 async function refreshJobs() {
   var tbody = document.getElementById("jobs-tbody");
   if (!tbody) return;
   try {
     var rows = await getJSON("/api/jobs");
+    var pages = Math.max(1, Math.ceil(rows.length / JOBS_PER_PAGE));
+    if (jobsPage > pages - 1) jobsPage = pages - 1; // clamp after deletes
+    if (jobsPage < 0) jobsPage = 0;
+    var start = jobsPage * JOBS_PER_PAGE;
     tbody.innerHTML = rows.length
-      ? rows.map(jobRow).join("")
+      ? rows.slice(start, start + JOBS_PER_PAGE).map(jobRow).join("")
       : '<tr><td colspan="8" class="muted">No jobs yet. <a href="/add">Add a game.</a></td></tr>';
+    renderJobsPager(rows.length, pages);
   } catch (e) {
     /* transient */
   }
+}
+
+function renderJobsPager(total, pages) {
+  var el = document.getElementById("jobs-pager");
+  if (!el) return;
+  if (total <= JOBS_PER_PAGE) {
+    el.innerHTML = "";
+    return;
+  }
+  var start = jobsPage * JOBS_PER_PAGE + 1;
+  var end = Math.min(total, (jobsPage + 1) * JOBS_PER_PAGE);
+  el.innerHTML =
+    '<button class="btn small" data-action="jobs-prev"' +
+    (jobsPage <= 0 ? " disabled" : "") +
+    ">← Prev</button>" +
+    '<span class="muted small">' +
+    start +
+    "–" +
+    end +
+    " of " +
+    total +
+    "</span>" +
+    '<button class="btn small" data-action="jobs-next"' +
+    (jobsPage >= pages - 1 ? " disabled" : "") +
+    ">Next →</button>";
 }
 
 // --- upload (Add page): XHR for real progress --------------------------------
@@ -368,6 +401,17 @@ document.addEventListener("click", async function (e) {
   var id = btn.dataset.id;
   var action = btn.dataset.action;
   var name = btn.dataset.title || id;
+
+  if (action === "jobs-prev") {
+    if (jobsPage > 0) jobsPage--;
+    refreshJobs();
+    return;
+  }
+  if (action === "jobs-next") {
+    jobsPage++;
+    refreshJobs();
+    return;
+  }
 
   if (action === "del-job") {
     if (
