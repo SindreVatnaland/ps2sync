@@ -49,7 +49,9 @@ function coverCandidates(g) {
     "https://thumbnails.libretro.com/" +
     encodeURIComponent(sys) +
     "/Named_Boxarts/";
-  var pre = String(g.serial || "").split("-")[0].toUpperCase();
+  var pre = String(g.serial || "")
+    .split("-")[0]
+    .toUpperCase();
   var region = /^(SLES|SCES|SLED|SCED|SLEH)/.test(pre)
     ? "Europe"
     : /^(SLPS|SLPM|SCPS|SCAJ|SLKA|SCKA|PCPX|SLAJ)/.test(pre)
@@ -279,7 +281,7 @@ function wireSearch() {
     // defined (results are client-rendered); change it below to point anywhere.
     var lib = g.inLibrary ? '<span class="pill">In library</span>' : "";
     var webSearch =
-      "https://www.romsgames.net/search/?q=" + encodeURIComponent(g.title);
+      "https://romsfun.com/browse-all-roms/?q=" + encodeURIComponent(g.title);
     // Box art from libretro's CDN (see coverCandidates). onerror walks the fallback
     // URLs, then hides the image if none exist. loading="lazy" defers off-screen ones.
     var srcs = coverCandidates(g);
