@@ -263,6 +263,15 @@ function wireUpload() {
   dz.addEventListener("drop", function (e) {
     if (e.dataTransfer) enqueue(e.dataTransfer.files);
   });
+
+  // Leaving/closing the tab aborts an in-flight upload (a page upload can't keep
+  // running in the background). Trigger the browser's leave prompt while a batch is
+  // uploading. The dialog text is fixed by the browser; live progress stays in-page.
+  window.addEventListener("beforeunload", function (e) {
+    if (!running) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
 }
 
 // --- catalogue + library search (Search page) --------------------------------
