@@ -70,6 +70,35 @@ function coverCandidates(g) {
   });
 }
 
+// Fill in cover thumbnails for any <img data-cover data-console data-serial data-title>
+// (library rows are server-rendered; jobs rows are built in JS). Walks the same
+// libretro candidate chain via onerror, then hides the image if none match.
+function hydrateCovers() {
+  var imgs = document.querySelectorAll("img[data-cover]:not([data-hydrated])");
+  for (var k = 0; k < imgs.length; k++) {
+    (function (img) {
+      img.setAttribute("data-hydrated", "1");
+      var g = {
+        console: img.getAttribute("data-console"),
+        serial: img.getAttribute("data-serial"),
+        title: img.getAttribute("data-title"),
+      };
+      if (!g.serial || !g.title) {
+        img.remove();
+        return;
+      }
+      var srcs = coverCandidates(g);
+      var i = 0;
+      img.onerror = function () {
+        i++;
+        if (i < srcs.length) img.src = srcs[i];
+        else img.remove();
+      };
+      img.src = srcs[0];
+    })(imgs[k]);
+  }
+}
+
 // --- jobs table (home page) --------------------------------------------------
 
 var STATE_BADGE = {
@@ -112,7 +141,17 @@ function jobRow(j) {
     ? '<span style="color:var(--danger)">' + esc(j.error) + "</span>"
     : "";
   var con = j.console ? consoleLabel(j.console) : "—";
-  var ser = j.serial ? "<code>" + esc(j.serial) + "</code>" : "—";
+  var ser = j.serial
+    ? '<img class="cover-sm" data-cover data-console="' +
+      esc(j.console) +
+      '" data-serial="' +
+      esc(j.serial) +
+      '" data-title="' +
+      esc(j.title || "") +
+      '" alt=""><code>' +
+      esc(j.serial) +
+      "</code>"
+    : "—";
   // Terminal jobs (ready/failed/duplicate) can be cleared from the list.
   var actions = !ACTIVE_STATE[j.state]
     ? '<button class="btn small danger" data-action="del-job" data-id="' +
@@ -156,6 +195,7 @@ async function refreshJobs() {
       ? rows.slice(start, start + JOBS_PER_PAGE).map(jobRow).join("")
       : '<tr><td colspan="8" class="muted">No jobs yet. <a href="/add">Add a game.</a></td></tr>';
     renderJobsPager(rows.length, pages);
+    hydrateCovers();
   } catch (e) {
     /* transient */
   }
@@ -571,6 +611,7 @@ async function refreshStorage() {
 wireUpload();
 wireLibrary();
 wireSearch();
+hydrateCovers(); // fill covers for the server-rendered library rows
 
 if (document.getElementById("jobs-tbody")) {
   refreshJobs();

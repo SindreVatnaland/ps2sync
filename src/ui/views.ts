@@ -43,7 +43,7 @@ function libraryTable(consoleLabel: string, rows: Game[]): string {
       const del = `<button class="btn small danger" data-action="delete" data-id="${id}" data-title="${title}">Delete</button>`;
       const search = escapeHtml(`${g.title} ${g.serial}`.toLowerCase());
       return `<tr data-row data-search="${search}">
-  <td>${title}</td>
+  <td><img class="cover-sm" data-cover data-console="${escapeHtml(g.console)}" data-serial="${escapeHtml(g.serial)}" data-title="${escapeHtml(g.title)}" alt="">${title}</td>
   <td><code>${escapeHtml(g.serial)}</code></td>
   <td>${escapeHtml(fmtMedia(g))}</td>
   <td data-value="${g.sizeBytes}">${fmtBytes(g.sizeBytes)}</td>
