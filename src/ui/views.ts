@@ -54,7 +54,8 @@ function libraryTable(consoleLabel: string, rows: Game[]): string {
     .join('\n');
 
   return `<h3>${escapeHtml(consoleLabel)} <span class="muted small">(${rows.length})</span></h3>
-<div class="table-wrap"><table>
+<div class="table-wrap"><table class="lib-table">
+<colgroup><col style="width:38%"><col style="width:18%"><col style="width:11%"><col style="width:11%"><col style="width:15%"><col style="width:7%"></colgroup>
 <thead><tr>
   <th data-col="0" data-type="text">Title</th>
   <th data-col="1" data-type="text">Serial</th>
@@ -123,7 +124,7 @@ export function addView(): string {
   </form>
 
   <div id="upload-status" class="hidden">
-    <div class="progress"><div id="upload-bar" class="progress-fill"></div></div>
+    <div id="upload-queue"></div>
     <p id="upload-text" class="muted small"></p>
   </div>
 </div>`;

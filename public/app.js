@@ -307,93 +307,135 @@ function wireUpload() {
   var input = document.getElementById("file-input");
   var targetSel = document.getElementById("target-select");
   var status = document.getElementById("upload-status");
-  var bar = document.getElementById("upload-bar");
+  var queueBox = document.getElementById("upload-queue");
   var text = document.getElementById("upload-text");
 
-  // Upload queue: files run one at a time (a POST each = one job) so several big
-  // images don't fight for bandwidth. Stays on the page when the batch finishes.
-  var queue = [];
+  // Upload queue with a visible list + per-file cancel. Files upload one at a time
+  // (each POST = one job). Cancel a queued file to drop it, or the active one to abort
+  // its in-flight upload.
+  var queue = []; // pending: {id, file}
+  var current = null; // {id, file} uploading now
+  var currentXhr = null;
   var running = false;
-  var batchTotal = 0;
-  var batchDone = 0;
-  var batchFailed = [];
+  var seq = 0;
+  var doneCount = 0;
+  var failed = [];
+
+  function itemRow(id, name, active) {
+    var mid = active
+      ? '<div class="progress" style="flex:1;min-width:70px"><div class="progress-fill" id="uq-bar-' +
+        id +
+        '"></div></div>'
+      : '<span class="muted small">Queued</span>';
+    return (
+      '<div class="uq-item" style="display:flex;align-items:center;gap:.5rem;margin:.3rem 0">' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+      esc(name) +
+      "</span>" +
+      mid +
+      '<button class="btn small danger" data-cancel="' +
+      id +
+      '" title="Cancel">✕</button></div>'
+    );
+  }
+
+  function renderQueue() {
+    if (!queueBox) return;
+    var rows = [];
+    if (current) rows.push(itemRow(current.id, current.file.name, true));
+    for (var i = 0; i < queue.length; i++)
+      rows.push(itemRow(queue[i].id, queue[i].file.name, false));
+    queueBox.innerHTML = rows.join("");
+  }
 
   function drain() {
     if (queue.length === 0) {
       running = false;
-      bar.style.width = "0%";
+      current = null;
+      currentXhr = null;
+      renderQueue();
       text.innerHTML =
-        (batchFailed.length
-          ? batchDone +
-            " uploaded, " +
-            batchFailed.length +
-            " failed (" +
-            esc(batchFailed.join(", ")) +
-            ")."
-          : "All " +
-            batchDone +
-            " upload" +
-            (batchDone === 1 ? "" : "s") +
-            " complete.") + ' Jobs started — see the <a href="/">Library</a>.';
+        doneCount || failed.length
+          ? (failed.length
+              ? doneCount + " uploaded, " + failed.length + " failed."
+              : "All " +
+                doneCount +
+                " upload" +
+                (doneCount === 1 ? "" : "s") +
+                " complete.") +
+            ' Jobs started — see the <a href="/">Library</a>.'
+          : "";
       return;
     }
     running = true;
-    var file = queue.shift();
-    var idx = batchDone + batchFailed.length + 1;
+    current = queue.shift();
+    renderQueue();
+    text.textContent = "";
+    var file = current.file;
     var fd = new FormData();
     fd.append("target", targetSel ? targetSel.value : "");
     fd.append("file", file);
     status.classList.remove("hidden");
     var xhr = new XMLHttpRequest();
+    currentXhr = xhr;
     xhr.open("POST", "/upload");
     xhr.upload.onprogress = function (e) {
-      if (!e.lengthComputable) return;
-      var p = Math.round((e.loaded / e.total) * 100);
-      bar.style.width = p + "%";
-      text.textContent =
-        "Uploading " +
-        idx +
-        "/" +
-        batchTotal +
-        ": " +
-        file.name +
-        "… " +
-        p +
-        "% (" +
-        fmtBytes(e.loaded) +
-        " / " +
-        fmtBytes(e.total) +
-        ")";
+      if (!e.lengthComputable || !current) return;
+      var b = document.getElementById("uq-bar-" + current.id);
+      if (b) b.style.width = Math.round((e.loaded / e.total) * 100) + "%";
     };
     xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 400) batchDone++;
-      else batchFailed.push(file.name);
-      bar.style.width = "0%";
+      if (xhr.status >= 200 && xhr.status < 400) doneCount++;
+      else failed.push(file.name);
+      current = null;
+      currentXhr = null;
       if (typeof refreshJobs === "function") refreshJobs(); // show the new job at once
       drain();
     };
     xhr.onerror = function () {
-      batchFailed.push(file.name);
-      bar.style.width = "0%";
+      failed.push(file.name);
+      current = null;
+      currentXhr = null;
+      drain();
+    };
+    xhr.onabort = function () {
+      // user cancelled this one — drop it silently and move on
+      current = null;
+      currentXhr = null;
       drain();
     };
     xhr.send(fd);
   }
 
-  // Queue one or more files. Adding files mid-batch extends the running batch.
+  // Queue one or more files. Adding files mid-batch extends the running queue.
   function enqueue(list) {
     if (!list || !list.length) return;
-    for (var i = 0; i < list.length; i++) queue.push(list[i]);
+    for (var i = 0; i < list.length; i++) queue.push({ id: ++seq, file: list[i] });
     status.classList.remove("hidden");
-    if (running) {
-      batchTotal += list.length;
-    } else {
-      batchDone = 0;
-      batchFailed = [];
-      batchTotal = queue.length;
+    text.textContent = "";
+    renderQueue();
+    if (!running) {
+      doneCount = 0;
+      failed = [];
       drain();
     }
   }
+
+  // Cancel: abort the active upload, or drop a still-queued file.
+  if (queueBox)
+    queueBox.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest("[data-cancel]") : null;
+      if (!btn) return;
+      var id = Number(btn.getAttribute("data-cancel"));
+      if (current && current.id === id) {
+        if (currentXhr) currentXhr.abort();
+      } else {
+        queue = queue.filter(function (it) {
+          return it.id !== id;
+        });
+        renderQueue();
+      }
+    });
 
   input.addEventListener("change", function () {
     enqueue(input.files);

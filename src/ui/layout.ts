@@ -116,6 +116,8 @@ code{background:var(--panel2);padding:.1rem .35rem;border-radius:4px;font-size:.
 .gcard .cover{width:100%;height:auto;border-radius:6px;margin-bottom:.5rem;display:block}
 .cover-sm{width:32px;height:44px;object-fit:cover;border-radius:3px;vertical-align:middle;margin-right:.45rem;display:inline-block}
 .cover-none{visibility:hidden}
+.lib-table{table-layout:fixed;width:100%}
+.lib-table td{overflow-wrap:anywhere}
 .gcard .gt{font-size:.9rem;margin:0 0 .4rem;line-height:1.3;font-weight:600}
 .pill{display:inline-block;font-size:.72rem;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:.05rem .45rem;margin:.1rem .1rem 0}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:.45rem}
