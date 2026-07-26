@@ -320,13 +320,49 @@ function wireUpload() {
   var seq = 0;
   var doneCount = 0;
   var failed = [];
+  var curLoaded = 0,
+    curTotal = 0,
+    speed = 0; // smoothed bytes/sec, for the batch ETA
 
-  function itemRow(id, name, active) {
+  function fmtEta(s) {
+    if (!isFinite(s) || s <= 0) return "";
+    s = Math.round(s);
+    if (s < 60) return s + "s";
+    var m = Math.round(s / 60);
+    if (m < 60) return m + " min";
+    return Math.floor(m / 60) + "h " + (m % 60) + "m";
+  }
+  function queuedBytes() {
+    var b = 0;
+    for (var i = 0; i < queue.length; i++) b += queue[i].file.size || 0;
+    return b;
+  }
+  function updateSummary() {
+    if (!current) return;
+    var remaining = Math.max(0, curTotal - curLoaded) + queuedBytes();
+    var eta = speed > 0 ? fmtEta(remaining / speed) : "";
+    text.textContent =
+      "Uploading " +
+      (doneCount + 1) +
+      " of " +
+      (doneCount + 1 + queue.length) +
+      " · " +
+      fmtBytes(remaining) +
+      " left" +
+      (eta ? " · ~" + eta : "") +
+      (speed > 0 ? " (" + fmtBytes(speed) + "/s)" : "");
+  }
+
+  function itemRow(id, name, active, size) {
     var mid = active
-      ? '<div class="progress" style="flex:1;min-width:70px"><div class="progress-fill" id="uq-bar-' +
+      ? '<div class="progress" style="flex:1;min-width:60px"><div class="progress-fill" id="uq-bar-' +
         id +
-        '"></div></div>'
-      : '<span class="muted small">Queued</span>';
+        '"></div></div><span class="muted small" id="uq-txt-' +
+        id +
+        '" style="white-space:nowrap">0%</span>'
+      : '<span class="muted small" style="white-space:nowrap">Queued · ' +
+        fmtBytes(size) +
+        "</span>";
     return (
       '<div class="uq-item" style="display:flex;align-items:center;gap:.5rem;margin:.3rem 0">' +
       '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
@@ -342,9 +378,10 @@ function wireUpload() {
   function renderQueue() {
     if (!queueBox) return;
     var rows = [];
-    if (current) rows.push(itemRow(current.id, current.file.name, true));
+    if (current)
+      rows.push(itemRow(current.id, current.file.name, true, current.file.size));
     for (var i = 0; i < queue.length; i++)
-      rows.push(itemRow(queue[i].id, queue[i].file.name, false));
+      rows.push(itemRow(queue[i].id, queue[i].file.name, false, queue[i].file.size));
     queueBox.innerHTML = rows.join("");
   }
 
@@ -353,6 +390,7 @@ function wireUpload() {
       running = false;
       current = null;
       currentXhr = null;
+      speed = 0;
       renderQueue();
       text.innerHTML =
         doneCount || failed.length
@@ -369,6 +407,8 @@ function wireUpload() {
     }
     running = true;
     current = queue.shift();
+    curLoaded = 0;
+    curTotal = current.file.size || 0;
     renderQueue();
     text.textContent = "";
     var file = current.file;
@@ -379,10 +419,29 @@ function wireUpload() {
     var xhr = new XMLHttpRequest();
     currentXhr = xhr;
     xhr.open("POST", "/upload");
+    var lastLoaded = 0,
+      lastTime = Date.now();
     xhr.upload.onprogress = function (e) {
       if (!e.lengthComputable || !current) return;
+      curLoaded = e.loaded;
+      curTotal = e.total;
+      var pct = Math.round((e.loaded / e.total) * 100);
       var b = document.getElementById("uq-bar-" + current.id);
-      if (b) b.style.width = Math.round((e.loaded / e.total) * 100) + "%";
+      if (b) b.style.width = pct + "%";
+      var t = document.getElementById("uq-txt-" + current.id);
+      if (t)
+        t.textContent =
+          pct + "% (" + fmtBytes(e.loaded) + " / " + fmtBytes(e.total) + ")";
+      var now = Date.now(),
+        dt = (now - lastTime) / 1000;
+      if (dt >= 0.4) {
+        speed = speed
+          ? speed * 0.7 + ((e.loaded - lastLoaded) / dt) * 0.3
+          : (e.loaded - lastLoaded) / dt;
+        lastLoaded = e.loaded;
+        lastTime = now;
+        updateSummary();
+      }
     };
     xhr.onload = function () {
       if (xhr.status >= 200 && xhr.status < 400) doneCount++;
