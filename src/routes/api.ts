@@ -8,6 +8,7 @@ import * as jobs from '../lib/jobs.js';
 import { deleteGame } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
 import { getServerLanIp, setServerLanIp, isValidLanIp } from '../lib/settings.js';
+import { libraryTablesHtml } from '../ui/views.js';
 import type { Console } from '../types.js';
 
 interface SearchResult {
@@ -47,6 +48,14 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   // Full library.
   app.get('/api/games', async () => {
     return db.select().from(games).orderBy(asc(games.console), asc(games.title)).all();
+  });
+
+  // Rendered library tables (HTML fragment) — the UI swaps this in when a job
+  // finishes, so the library updates without a full page reload.
+  app.get('/api/library', async (_req, reply) => {
+    const rows = db.select().from(games).orderBy(asc(games.console), asc(games.title)).all();
+    reply.type('text/html; charset=utf-8');
+    return libraryTablesHtml(rows);
   });
 
   // Metadata search: the PS2 serial catalogue (PCSX2 GameIndex) plus the local

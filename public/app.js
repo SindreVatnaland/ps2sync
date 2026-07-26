@@ -268,11 +268,29 @@ function jobRow(j) {
 var jobsPage = 0;
 var JOBS_PER_PAGE = 5;
 
+// When a job first reaches a terminal "done" state (a game was placed), refresh the
+// library in place so the new game appears without a manual reload.
+var seenDone = null; // map of completed job ids; null until the first poll
+function detectCompletions(rows) {
+  var doneNow = {},
+    isNew = false;
+  for (var i = 0; i < rows.length; i++) {
+    var st = rows[i].state;
+    if (st === "ready" || st === "staged") {
+      doneNow[rows[i].id] = 1;
+      if (seenDone && !seenDone[rows[i].id]) isNew = true;
+    }
+  }
+  if (seenDone && isNew && typeof refreshLibrary === "function") refreshLibrary();
+  seenDone = doneNow;
+}
+
 async function refreshJobs() {
   var tbody = document.getElementById("jobs-tbody");
   if (!tbody) return;
   try {
     var rows = await getJSON("/api/jobs");
+    detectCompletions(rows);
     var pages = Math.max(1, Math.ceil(rows.length / JOBS_PER_PAGE));
     if (jobsPage > pages - 1) jobsPage = pages - 1; // clamp after deletes
     if (jobsPage < 0) jobsPage = 0;
@@ -803,21 +821,48 @@ function sortTable(th) {
   });
 }
 
+function applyLibraryFilter() {
+  var filter = document.getElementById("lib-filter");
+  var q = filter ? filter.value.trim().toLowerCase() : "";
+  document.querySelectorAll("tr[data-row]").forEach(function (tr) {
+    tr.style.display =
+      tr.getAttribute("data-search").indexOf(q) !== -1 ? "" : "none";
+  });
+}
+function wireLibrarySort() {
+  document
+    .querySelectorAll("th[data-col]:not([data-sortwired])")
+    .forEach(function (th) {
+      th.setAttribute("data-sortwired", "1");
+      th.addEventListener("click", function () {
+        sortTable(th);
+      });
+    });
+}
 function wireLibrary() {
   var filter = document.getElementById("lib-filter");
-  if (!filter) return;
-  filter.addEventListener("input", function () {
-    var q = filter.value.trim().toLowerCase();
-    document.querySelectorAll("tr[data-row]").forEach(function (tr) {
-      tr.style.display =
-        tr.getAttribute("data-search").indexOf(q) !== -1 ? "" : "none";
-    });
-  });
-  document.querySelectorAll("th[data-col]").forEach(function (th) {
-    th.addEventListener("click", function () {
-      sortTable(th);
-    });
-  });
+  if (filter && !filter.dataset.wired) {
+    filter.dataset.wired = "1";
+    filter.addEventListener("input", applyLibraryFilter);
+  }
+  wireLibrarySort();
+}
+// Swap in freshly-rendered library tables (called when a job completes) without a
+// full reload — re-hydrate covers, re-wire the new sort headers, re-apply the filter.
+function refreshLibrary() {
+  var body = document.getElementById("library-body");
+  if (!body) return;
+  fetch("/api/library", { headers: { accept: "text/html" } })
+    .then(function (r) {
+      return r.text();
+    })
+    .then(function (html) {
+      body.innerHTML = html;
+      if (typeof hydrateCovers === "function") hydrateCovers();
+      wireLibrarySort();
+      applyLibraryFilter();
+    })
+    .catch(function () {});
 }
 
 // --- storage usage (home page) -----------------------------------------------

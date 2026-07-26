@@ -70,23 +70,27 @@ ${body}
 </table></div>`;
 }
 
-export function libraryView(games: Game[]): string {
+// Just the tables — re-rendered on its own by GET /api/library so the library can
+// update in place when a job finishes, without a full page reload.
+export function libraryTablesHtml(games: Game[]): string {
+  if (games.length === 0) {
+    return `<p class="muted">No games organised yet. <a href="/add">Add one</a> to get started.</p>`;
+  }
   const ps2 = games.filter((g) => g.console === 'ps2');
   const ps1 = games.filter((g) => g.console === 'ps1');
+  return `${libraryTable('PlayStation 2 (OPL — DVD / CD)', ps2)}
+${libraryTable('PlayStation 1 (POPStarter — POPS)', ps1)}`;
+}
 
-  const empty =
-    games.length === 0
-      ? `<p class="muted">No games organised yet. <a href="/add">Add one</a> to get started.</p>`
-      : '';
-
+export function libraryView(games: Game[]): string {
   return `<h2 style="margin-top:2rem">Library</h2>
 <div class="card">
   <label for="lib-filter">Filter by title or serial</label>
   <input id="lib-filter" type="text" placeholder="type to filter…" autocomplete="off">
 </div>
-${empty}
-${libraryTable('PlayStation 2 (OPL — DVD / CD)', ps2)}
-${libraryTable('PlayStation 1 (POPStarter — POPS)', ps1)}`;
+<div id="library-body">
+${libraryTablesHtml(games)}
+</div>`;
 }
 
 // --- Add ---------------------------------------------------------------------
