@@ -86,7 +86,13 @@ services:
       TS_HOSTNAME: ps2sync
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"
-    volumes: [ts_ps2sync_state:/var/lib/tailscale]
+      # containerboot re-applies this funnel config on every start, so the public
+      # https://ps2sync…/ -> zoraxy:80 route survives recreate/state-wipe without
+      # a manual `tailscale funnel` exec. ${TS_CERT_DOMAIN} = this node's own name.
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ts_ps2sync_state:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
     networks: [web]
 
 networks:

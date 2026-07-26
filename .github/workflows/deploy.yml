@@ -19,6 +19,8 @@ jobs:
     # arm64 hardware avoids QEMU emulation (the main reason better-sqlite3 +
     # cue2pops were slow to compile). Billed as arm64 minutes on private repos.
     runs-on: ubuntu-24.04-arm
+    env:
+      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,3 +49,13 @@ jobs:
           # restore instead of recompiling. Biggest win after dropping QEMU.
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Best-effort: skipped until DEPLOY_TOKEN is set; never fails the build.
+      - name: Trigger redeploy
+        if: ${{ env.DEPLOY_TOKEN != '' }}
+        continue-on-error: true
+        run: |
+          curl -fsS -X POST https://homelab.tailcd7b6f.ts.net/deploy/hooks/redeploy \
+            -H "X-Deploy-Token: $DEPLOY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"project":"ps2sync"}'

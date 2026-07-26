@@ -38,6 +38,36 @@ function consoleLabel(c) {
   return c === "ps1" ? "PS1" : c === "ps2" ? "PS2" : "—";
 }
 
+// Box art straight from libretro's public thumbnail CDN — no server, no scraping,
+// just an <img> the browser loads. Thumbnails are keyed by No-Intro name, which our
+// catalogue titles nearly match (they already use " - " for subtitles); the region
+// tag is derived from the serial prefix. Returns candidate URLs tried in order via
+// the <img> onerror chain; a full miss just hides the image.
+function coverCandidates(g) {
+  var sys = g.console === "ps1" ? "Sony - PlayStation" : "Sony - PlayStation 2";
+  var base =
+    "https://thumbnails.libretro.com/" +
+    encodeURIComponent(sys) +
+    "/Named_Boxarts/";
+  var pre = String(g.serial || "").split("-")[0].toUpperCase();
+  var region = /^(SLES|SCES|SLED|SCED|SLEH)/.test(pre)
+    ? "Europe"
+    : /^(SLPS|SLPM|SCPS|SCAJ|SLKA|SCKA|PCPX|SLAJ)/.test(pre)
+      ? "Japan"
+      : "USA";
+  var regions = [region, "USA", "Europe", "Japan"].filter(function (r, i, a) {
+    return a.indexOf(r) === i;
+  });
+  var names = [];
+  regions.forEach(function (r) {
+    names.push(g.title + " (" + r + ")");
+    if (g.console === "ps1") names.push(g.title + " (" + r + ") (Disc 1)");
+  });
+  return names.slice(0, 6).map(function (n) {
+    return base + encodeURIComponent(n) + ".png";
+  });
+}
+
 // --- jobs table (home page) --------------------------------------------------
 
 var STATE_BADGE = {
@@ -51,7 +81,12 @@ var STATE_BADGE = {
   placing: "busy",
 };
 
-var ACTIVE_STATE = { downloading: 1, identifying: 1, converting: 1, placing: 1 };
+var ACTIVE_STATE = {
+  downloading: 1,
+  identifying: 1,
+  converting: 1,
+  placing: 1,
+};
 
 function jobRow(j) {
   // Only show a progress bar while the job is actively working.
@@ -193,15 +228,30 @@ function wireSearch() {
     seq = 0;
 
   function card(g) {
-    // Metadata only — no links, no download sources (app provides no game files).
-    var lib = g.inLibrary
-      ? '<span class="pill">In library</span>'
-      : "";
+    // Metadata only — no game files hosted here. The title links out to an external
+    // site so you can find/grab the game. This URL is the only place the link is
+    // defined (results are client-rendered); change it below to point anywhere.
+    var lib = g.inLibrary ? '<span class="pill">In library</span>' : "";
+    var webSearch =
+      "https://www.romsgames.net/search/?q=" + encodeURIComponent(g.title);
+    // Box art from libretro's CDN (see coverCandidates). onerror walks the fallback
+    // URLs, then hides the image if none exist. loading="lazy" defers off-screen ones.
+    var srcs = coverCandidates(g);
+    var cover =
+      '<img class="cover" loading="lazy" alt="" data-srcs="' +
+      esc(JSON.stringify(srcs)) +
+      '" data-i="0" src="' +
+      esc(srcs[0]) +
+      '" onerror="var s=JSON.parse(this.dataset.srcs),i=+this.dataset.i+1;if(s[i]){this.dataset.i=i;this.src=s[i];}else{this.remove();}">';
     return (
       '<div class="gcard">' +
+      cover +
       '<div class="gt">' +
+      '<a href="' +
+      webSearch +
+      '" target="_blank" rel="noopener">' +
       esc(g.title) +
-      "</div>" +
+      "</a></div>" +
       "<div><code>" +
       esc(g.serial) +
       "</code></div>" +
@@ -339,12 +389,17 @@ async function refreshStorage() {
         "</strong> game" +
         (pi.stagedGames === 1 ? "" : "s") +
         (pi.totalBytes
-          ? " · " + fmtBytes(pi.freeBytes) + " free of " + fmtBytes(pi.totalBytes)
+          ? " · " +
+            fmtBytes(pi.freeBytes) +
+            " free of " +
+            fmtBytes(pi.totalBytes)
           : "") +
         "</p>",
     );
     if (pi.totalBytes) {
-      var usedPct = Math.round(((pi.totalBytes - pi.freeBytes) / pi.totalBytes) * 100);
+      var usedPct = Math.round(
+        ((pi.totalBytes - pi.freeBytes) / pi.totalBytes) * 100,
+      );
       lines.push(
         '<div class="progress" style="max-width:420px"><div class="progress-fill" style="width:' +
           usedPct +

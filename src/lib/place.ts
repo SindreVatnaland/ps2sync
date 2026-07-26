@@ -12,6 +12,7 @@ import { games, type Game } from '../db/schema.js';
 import type { Console } from '../types.js';
 import { sanitizeTitle } from './sanitize.js';
 import { DATA_DIR, dvdDir, cdDir, popsDir } from './paths.js';
+import { ensureCoverArt, removeCoverArt } from './art.js';
 
 export interface PlacePs2Input {
   serial: string;
@@ -82,6 +83,7 @@ export async function placePs2(input: PlacePs2Input): Promise<Game> {
     })
     .returning()
     .all();
+  void ensureCoverArt(serial, title, 'ps2'); // fire-and-forget: art must never gate placement
   return rows[0];
 }
 
@@ -112,11 +114,13 @@ export async function placePs1(input: PlacePs1Input): Promise<Game> {
     })
     .returning()
     .all();
+  void ensureCoverArt(serial, title, 'ps1'); // fire-and-forget: art must never gate placement
   return rows[0];
 }
 
 // Remove a game's file and its row. rm -f is idempotent — safe if the file is already gone.
 export async function deleteGame(game: Game): Promise<void> {
   await fs.rm(path.join(DATA_DIR, game.stagedPath), { recursive: true, force: true });
+  await removeCoverArt(game.serial); // drop its ART/<BOOT_ID>_COV.png too
   db.delete(games).where(eq(games.id, game.id)).run();
 }
