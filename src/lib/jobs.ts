@@ -107,6 +107,24 @@ export function runJob(id: string, opts: JobOverrides = {}): Promise<void> {
 }
 
 // Boot recovery: re-queue every non-terminal job and drop orphaned incoming dirs.
+// Delete a job and its scratch dir (the uploaded file + _work). For clearing a
+// finished/failed/canceled job. rm -f is idempotent, so it's safe even mid-run — the
+// pipeline just errors harmlessly on the vanished dir. Staged games are separate rows.
+export async function deleteJob(id: string): Promise<void> {
+  await fsp.rm(incomingJobDir(id), { recursive: true, force: true });
+  db.delete(jobs).where(eq(jobs.id, id)).run();
+}
+
+// Delete every terminal job (ready/failed/duplicate) + its scratch dir. Returns the
+// count removed. Active jobs are left running.
+export async function clearFinishedJobs(): Promise<number> {
+  const terminal: JobState[] = ['ready', 'failed', 'duplicate'];
+  const rows = db.select({ id: jobs.id }).from(jobs).where(inArray(jobs.state, terminal)).all();
+  for (const r of rows) await fsp.rm(incomingJobDir(r.id), { recursive: true, force: true });
+  db.delete(jobs).where(inArray(jobs.state, terminal)).run();
+  return rows.length;
+}
+
 export async function reconcile(): Promise<void> {
   const stuck = db.select().from(jobs).where(inArray(jobs.state, NON_TERMINAL)).all();
   const live = new Set(stuck.map((j) => j.id));

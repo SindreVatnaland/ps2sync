@@ -168,12 +168,15 @@ export function searchView(): string {
 export function jobsView(): string {
   return `<h2>Jobs</h2>
 <div class="card">
-  <p class="muted small">Active and recent ingest jobs. Auto-refreshes every 2 seconds.</p>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+    <p class="muted small" style="margin:0">Active and recent ingest jobs. Auto-refreshes every 2 seconds.</p>
+    <button class="btn small" data-action="clear-jobs">Clear finished</button>
+  </div>
   <div class="table-wrap"><table>
   <thead><tr>
-    <th>Source</th><th>Kind</th><th>Console</th><th>Serial</th><th>State</th><th>Progress</th><th>Info</th>
+    <th>Source</th><th>Kind</th><th>Console</th><th>Serial</th><th>State</th><th>Progress</th><th>Info</th><th></th>
   </tr></thead>
-  <tbody id="jobs-tbody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+  <tbody id="jobs-tbody"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
   </table></div>
 </div>`;
 }

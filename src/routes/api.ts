@@ -4,6 +4,7 @@ import { asc, desc, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { games, jobs as jobsTable } from '../db/schema.js';
 import * as gamedb from '../lib/gamedb.js';
+import * as jobs from '../lib/jobs.js';
 import { deleteGame } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
 import type { Console } from '../types.js';
@@ -83,4 +84,15 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
     await deleteGame(game);
     return { ok: true };
   });
+
+  // Delete a single job + its scratch files (e.g. a failed/canceled upload).
+  app.post<{ Params: { id: string } }>('/api/jobs/:id/delete', async (req, reply) => {
+    const job = db.select().from(jobsTable).where(eq(jobsTable.id, req.params.id)).get();
+    if (!job) return reply.code(404).send({ error: 'job not found' });
+    await jobs.deleteJob(job.id);
+    return { ok: true };
+  });
+
+  // Clear all finished/failed/duplicate jobs at once.
+  app.post('/api/jobs/clear', async () => ({ cleared: await jobs.clearFinishedJobs() }));
 }

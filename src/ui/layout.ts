@@ -17,7 +17,6 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { key: 'library', href: '/', label: 'Library' },
-  { key: 'add', href: '/add', label: 'Add' },
   { key: 'search', href: '/search', label: 'Search' },
   { key: 'guide', href: '/guide', label: 'Setup guide' },
 ];

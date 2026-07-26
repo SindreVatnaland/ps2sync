@@ -113,6 +113,12 @@ function jobRow(j) {
     : "";
   var con = j.console ? consoleLabel(j.console) : "—";
   var ser = j.serial ? "<code>" + esc(j.serial) + "</code>" : "—";
+  // Terminal jobs (ready/failed/duplicate) can be cleared from the list.
+  var actions = !ACTIVE_STATE[j.state]
+    ? '<button class="btn small danger" data-action="del-job" data-id="' +
+      esc(j.id) +
+      '">Delete</button>'
+    : "";
   return (
     "<tr><td>" +
     esc(j.source || "—") +
@@ -128,6 +134,8 @@ function jobRow(j) {
     prog +
     "</td><td>" +
     info +
+    "</td><td>" +
+    actions +
     "</td></tr>"
   );
 }
@@ -139,7 +147,7 @@ async function refreshJobs() {
     var rows = await getJSON("/api/jobs");
     tbody.innerHTML = rows.length
       ? rows.map(jobRow).join("")
-      : '<tr><td colspan="7" class="muted">No jobs yet. <a href="/add">Add a game.</a></td></tr>';
+      : '<tr><td colspan="8" class="muted">No jobs yet. <a href="/add">Add a game.</a></td></tr>';
   } catch (e) {
     /* transient */
   }
@@ -359,6 +367,49 @@ document.addEventListener("click", async function (e) {
   var id = btn.dataset.id;
   var action = btn.dataset.action;
   var name = btn.dataset.title || id;
+
+  if (action === "del-job") {
+    if (
+      !confirm(
+        "Delete this job from the list? Removes the job and any leftover upload file. Staged games are not affected.",
+      )
+    )
+      return;
+    btn.disabled = true;
+    try {
+      await fetch("/api/jobs/" + id + "/delete", {
+        method: "POST",
+        headers: { accept: "application/json" },
+      });
+      location.reload();
+    } catch (err) {
+      btn.disabled = false;
+      alert("Delete failed: " + err);
+    }
+    return;
+  }
+
+  if (action === "clear-jobs") {
+    if (
+      !confirm(
+        "Clear all finished, failed and duplicate jobs? Staged games are not affected.",
+      )
+    )
+      return;
+    btn.disabled = true;
+    try {
+      await fetch("/api/jobs/clear", {
+        method: "POST",
+        headers: { accept: "application/json" },
+      });
+      location.reload();
+    } catch (err) {
+      btn.disabled = false;
+      alert("Clear failed: " + err);
+    }
+    return;
+  }
+
   if (action !== "delete") return;
   if (
     !confirm(

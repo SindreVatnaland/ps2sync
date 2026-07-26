@@ -11,17 +11,15 @@ import { libraryView, addView, searchView, jobsView, guideView, storageView } fr
 const HTML = 'text/html; charset=utf-8';
 
 export async function pageRoutes(app: FastifyInstance): Promise<void> {
-  // Home = storage card (top) + jobs + library, one page.
+  // One page: Add (top) + storage + jobs + library. No hopping between pages.
   app.get('/', async (_req, reply) => {
     const rows = db.select().from(games).orderBy(asc(games.console), asc(games.title)).all();
     reply.type(HTML);
-    return renderPage('Library', 'library', storageView() + jobsView() + libraryView(rows));
+    return renderPage('Library', 'library', addView() + storageView() + jobsView() + libraryView(rows));
   });
 
-  app.get('/add', async (_req, reply) => {
-    reply.type(HTML);
-    return renderPage('Add', 'add', addView());
-  });
+  // Add is folded into home now; keep the path working for old bookmarks.
+  app.get('/add', async (_req, reply) => reply.redirect('/'));
 
   app.get('/search', async (_req, reply) => {
     reply.type(HTML);
