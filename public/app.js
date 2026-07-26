@@ -154,8 +154,36 @@ function wireUpload() {
   var bar = document.getElementById("upload-bar");
   var text = document.getElementById("upload-text");
 
-  function upload(file) {
-    if (!file) return;
+  // Upload queue: files run one at a time (a POST each = one job) so several big
+  // images don't fight for bandwidth. Stays on the page when the batch finishes.
+  var queue = [];
+  var running = false;
+  var batchTotal = 0;
+  var batchDone = 0;
+  var batchFailed = [];
+
+  function drain() {
+    if (queue.length === 0) {
+      running = false;
+      bar.style.width = "0%";
+      text.innerHTML =
+        (batchFailed.length
+          ? batchDone +
+            " uploaded, " +
+            batchFailed.length +
+            " failed (" +
+            esc(batchFailed.join(", ")) +
+            ")."
+          : "All " +
+            batchDone +
+            " upload" +
+            (batchDone === 1 ? "" : "s") +
+            " complete.") + ' Jobs started — see the <a href="/">Library</a>.';
+      return;
+    }
+    running = true;
+    var file = queue.shift();
+    var idx = batchDone + batchFailed.length + 1;
     var fd = new FormData();
     fd.append("target", targetSel ? targetSel.value : "");
     fd.append("file", file);
@@ -168,6 +196,10 @@ function wireUpload() {
       bar.style.width = p + "%";
       text.textContent =
         "Uploading " +
+        idx +
+        "/" +
+        batchTotal +
+        ": " +
         file.name +
         "… " +
         p +
@@ -178,22 +210,37 @@ function wireUpload() {
         ")";
     };
     xhr.onload = function () {
-      if (xhr.status >= 200 && xhr.status < 400) {
-        text.textContent = "Upload complete — starting job…";
-        window.location = "/";
-      } else {
-        bar.style.width = "0%";
-        text.textContent = "Upload failed: " + (xhr.responseText || xhr.status);
-      }
+      if (xhr.status >= 200 && xhr.status < 400) batchDone++;
+      else batchFailed.push(file.name);
+      bar.style.width = "0%";
+      drain();
     };
     xhr.onerror = function () {
-      text.textContent = "Upload failed (network error).";
+      batchFailed.push(file.name);
+      bar.style.width = "0%";
+      drain();
     };
     xhr.send(fd);
   }
 
+  // Queue one or more files. Adding files mid-batch extends the running batch.
+  function enqueue(list) {
+    if (!list || !list.length) return;
+    for (var i = 0; i < list.length; i++) queue.push(list[i]);
+    status.classList.remove("hidden");
+    if (running) {
+      batchTotal += list.length;
+    } else {
+      batchDone = 0;
+      batchFailed = [];
+      batchTotal = queue.length;
+      drain();
+    }
+  }
+
   input.addEventListener("change", function () {
-    upload(input.files[0]);
+    enqueue(input.files);
+    input.value = ""; // allow re-picking the same file(s)
   });
   dz.addEventListener("click", function (e) {
     var t = e.target.tagName;
@@ -212,8 +259,7 @@ function wireUpload() {
     });
   });
   dz.addEventListener("drop", function (e) {
-    if (e.dataTransfer && e.dataTransfer.files[0])
-      upload(e.dataTransfer.files[0]);
+    if (e.dataTransfer) enqueue(e.dataTransfer.files);
   });
 }
 
