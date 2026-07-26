@@ -70,33 +70,66 @@ function coverCandidates(g) {
   });
 }
 
-// Fill in cover thumbnails for any <img data-cover data-console data-serial data-title>
-// (library rows are server-rendered; jobs rows are built in JS). Walks the same
-// libretro candidate chain via onerror, then hides the image if none match.
+// Cover thumbnails, cached so the 2s jobs refresh doesn't reload/flicker them.
+// coverCache["console|serial"] = resolved URL, "" = looked up (none), undefined = unknown.
+var coverCache = {};
+function coverKey(con, serial) {
+  return con + "|" + serial;
+}
+
+// The cover cell HTML for a row. When the cover is already known we emit the resolved
+// <img src> (or a fixed-size empty box) directly — no data-cover, so hydrateCovers
+// skips it and it loads from the browser cache with no shift. Unknown ones get a
+// data-cover <img> for hydrateCovers to resolve once.
+function coverCell(con, serial, title) {
+  if (!con || !serial) return '<span class="cover-sm cover-none"></span>';
+  var c = coverCache[coverKey(con, serial)];
+  if (c === "") return '<span class="cover-sm cover-none"></span>';
+  if (c) return '<img class="cover-sm" src="' + esc(c) + '" alt="">';
+  return (
+    '<img class="cover-sm" data-cover data-console="' +
+    esc(con) +
+    '" data-serial="' +
+    esc(serial) +
+    '" data-title="' +
+    esc(title || "") +
+    '" alt="">'
+  );
+}
+
+// Resolve any not-yet-hydrated data-cover images by walking the libretro candidates.
+// Records the outcome in coverCache; on a full miss swaps in a fixed-size empty box
+// so the row height never changes.
 function hydrateCovers() {
   var imgs = document.querySelectorAll("img[data-cover]:not([data-hydrated])");
   for (var k = 0; k < imgs.length; k++) {
     (function (img) {
       img.setAttribute("data-hydrated", "1");
-      var g = {
-        console: img.getAttribute("data-console"),
-        serial: img.getAttribute("data-serial"),
-        title: img.getAttribute("data-title"),
-      };
-      if (!g.serial || !g.title) {
-        img.remove();
-        return;
-      }
-      var srcs = coverCandidates(g);
+      var con = img.getAttribute("data-console");
+      var serial = img.getAttribute("data-serial");
+      var title = img.getAttribute("data-title");
+      if (!serial || !title) return void markNone(img, con, serial);
+      var key = coverKey(con, serial);
+      var srcs = coverCandidates({ console: con, serial: serial, title: title });
       var i = 0;
+      img.onload = function () {
+        coverCache[key] = img.getAttribute("src");
+      };
       img.onerror = function () {
         i++;
         if (i < srcs.length) img.src = srcs[i];
-        else img.remove();
+        else markNone(img, con, serial);
       };
       img.src = srcs[0];
     })(imgs[k]);
   }
+}
+
+function markNone(img, con, serial) {
+  if (con && serial) coverCache[coverKey(con, serial)] = "";
+  var span = document.createElement("span");
+  span.className = "cover-sm cover-none";
+  if (img.parentNode) img.parentNode.replaceChild(span, img);
 }
 
 // --- jobs table (home page) --------------------------------------------------
@@ -141,17 +174,7 @@ function jobRow(j) {
     ? '<span style="color:var(--danger)">' + esc(j.error) + "</span>"
     : "";
   var con = j.console ? consoleLabel(j.console) : "—";
-  var ser = j.serial
-    ? '<img class="cover-sm" data-cover data-console="' +
-      esc(j.console) +
-      '" data-serial="' +
-      esc(j.serial) +
-      '" data-title="' +
-      esc(j.title || "") +
-      '" alt=""><code>' +
-      esc(j.serial) +
-      "</code>"
-    : "—";
+  var ser = j.serial ? "<code>" + esc(j.serial) + "</code>" : "—";
   // Terminal jobs (ready/failed/duplicate) can be cleared from the list.
   var actions = !ACTIVE_STATE[j.state]
     ? '<button class="btn small danger" data-action="del-job" data-id="' +
@@ -160,6 +183,7 @@ function jobRow(j) {
     : "";
   return (
     "<tr><td>" +
+    coverCell(j.console, j.serial, j.title) +
     esc(j.source || "—") +
     "</td><td>" +
     esc(j.kind) +
