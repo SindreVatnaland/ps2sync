@@ -132,6 +132,54 @@ function markNone(img, con, serial) {
   if (img.parentNode) img.parentNode.replaceChild(span, img);
 }
 
+// Setup guide: the server's LAN IP field. Loads the saved value (or auto-fills from
+// the browser's address when the UI was opened via the LAN IP), writes it into the
+// SMB address shown in step 4, and saves on click.
+function wireGuideIp() {
+  var input = document.getElementById("lan-ip");
+  if (!input) return; // not on the guide page
+  var save = document.getElementById("lan-ip-save");
+  var msg = document.getElementById("lan-ip-msg");
+  var isIpv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
+  function apply(ip) {
+    var spots = document.querySelectorAll(".smb-ip");
+    for (var i = 0; i < spots.length; i++)
+      spots[i].textContent = ip || "192.168.1.10";
+  }
+  getJSON("/api/settings")
+    .then(function (s) {
+      var ip =
+        s.serverLanIp ||
+        (isIpv4.test(location.hostname) ? location.hostname : "");
+      input.value = ip;
+      apply(ip);
+    })
+    .catch(function () {});
+  save.addEventListener("click", async function () {
+    save.disabled = true;
+    msg.textContent = "Saving…";
+    try {
+      var r = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ serverLanIp: input.value.trim() }),
+      });
+      var body = await r.json();
+      save.disabled = false;
+      if (!r.ok) {
+        msg.textContent = body.error || "Save failed";
+        return;
+      }
+      input.value = body.serverLanIp || "";
+      apply(input.value);
+      msg.textContent = "Saved.";
+    } catch (e) {
+      save.disabled = false;
+      msg.textContent = "Save failed.";
+    }
+  });
+}
+
 // --- jobs table (home page) --------------------------------------------------
 
 var STATE_BADGE = {
@@ -636,6 +684,7 @@ async function refreshStorage() {
 wireUpload();
 wireLibrary();
 wireSearch();
+wireGuideIp();
 hydrateCovers(); // fill covers for the server-rendered library rows
 
 if (document.getElementById("jobs-tbody")) {

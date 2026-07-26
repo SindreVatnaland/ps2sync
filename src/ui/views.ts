@@ -197,6 +197,17 @@ the PS2 pulls games straight off this server over your network — you never cop
 already sorts every upload into the right folder (<code>DVD/</code>, <code>CD/</code>, <code>POPS/</code>).</p>
 
 <div class="card">
+  <label for="lan-ip"><strong>Your server's LAN IP</strong> — the SMB address OPL connects to (step 4)</label>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:.4rem">
+    <input id="lan-ip" type="text" placeholder="192.168.1.10" style="width:12rem">
+    <button class="btn small" id="lan-ip-save">Save</button>
+    <span id="lan-ip-msg" class="muted small"></span>
+  </div>
+  <p class="muted small">Auto-filled if you opened this page via the Pi's LAN IP. Set it once — it then
+    shows in step 4 and never changes (give the Pi a DHCP reservation so it stays put).</p>
+</div>
+
+<div class="card">
   <h2>1. What you need</h2>
   <ul>
     <li>A <strong>PlayStation 2</strong> with <strong>wired Ethernet</strong>. Slim models
@@ -248,8 +259,8 @@ already sorts every upload into the right folder (<code>DVD/</code>, <code>CD/</
   <h2>4. Point OPL at this server (SMB)</h2>
   <p>Start OPL, open its <strong>Settings → Network config</strong>, and enter:</p>
   <ul>
-    <li><strong>SMB server</strong>: this server's LAN IP, e.g. <code>192.168.1.10</code>
-      (whatever address the box hosting the Samba share has).</li>
+    <li><strong>SMB server</strong>: this server's LAN IP — <code class="smb-ip">192.168.1.10</code>
+      (set it in the field at the top of this guide; it fills in here).</li>
     <li><strong>Port</strong>: <code>445</code></li>
     <li><strong>Share name</strong>: <code>PS2</code></li>
     <li><strong>Login / password</strong>: <strong>guest</strong> (leave the user/password blank or set to

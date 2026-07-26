@@ -7,6 +7,7 @@ import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
 import { deleteGame } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
+import { getServerLanIp, setServerLanIp, isValidLanIp } from '../lib/settings.js';
 import type { Console } from '../types.js';
 
 interface SearchResult {
@@ -76,6 +77,17 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
 
   // Shared /data disk usage (polled by the UI).
   app.get('/api/storage', async () => storageSummary());
+
+  // Server's LAN IP, shown in the guide as OPL's SMB address. Editable there.
+  app.get('/api/settings', async () => ({ serverLanIp: getServerLanIp() }));
+  app.post<{ Body: { serverLanIp?: string } }>('/api/settings', async (req, reply) => {
+    const ip = (req.body?.serverLanIp ?? '').trim();
+    if (!isValidLanIp(ip)) {
+      return reply.code(400).send({ error: 'Enter a valid IPv4 address, e.g. 192.168.1.10' });
+    }
+    setServerLanIp(ip);
+    return { serverLanIp: getServerLanIp() };
+  });
 
   // Delete an organised game: remove its file from DVD/CD/POPS and drop the row.
   app.post<{ Params: { id: string } }>('/api/games/:id/delete', async (req, reply) => {
