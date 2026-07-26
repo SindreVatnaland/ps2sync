@@ -50,7 +50,11 @@ function coverCandidates(g) {
   // serial. PS1 and PS2 each have their own repo, so a title mismatch (e.g. EU
   // "Crash Bandicoot 3 - Warped" vs US "Crash Bandicoot - Warped") no longer matters.
   var repo =
-    g.console === "ps1" ? "psx-covers" : g.console === "ps2" ? "ps2-covers" : "";
+    g.console === "ps1"
+      ? "psx-covers"
+      : g.console === "ps2"
+        ? "ps2-covers"
+        : "";
   if (repo && serial) {
     out.push(
       "https://cdn.jsdelivr.net/gh/xlenore/" +
@@ -78,7 +82,9 @@ function coverCandidates(g) {
   regions.forEach(function (r) {
     out.push(base + encodeURIComponent(g.title + " (" + r + ")") + ".png");
     if (g.console === "ps1")
-      out.push(base + encodeURIComponent(g.title + " (" + r + ") (Disc 1)") + ".png");
+      out.push(
+        base + encodeURIComponent(g.title + " (" + r + ") (Disc 1)") + ".png",
+      );
   });
   return out.slice(0, 7);
 }
@@ -123,7 +129,11 @@ function hydrateCovers() {
       var title = img.getAttribute("data-title");
       if (!serial || !title) return void markNone(img, con, serial);
       var key = coverKey(con, serial);
-      var srcs = coverCandidates({ console: con, serial: serial, title: title });
+      var srcs = coverCandidates({
+        console: con,
+        serial: serial,
+        title: title,
+      });
       var i = 0;
       img.onload = function () {
         coverCache[key] = img.getAttribute("src");
@@ -174,7 +184,10 @@ function wireGuideIp() {
     try {
       var r = await fetch("/api/settings", {
         method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+        },
         body: JSON.stringify({ serverLanIp: input.value.trim() }),
       });
       var body = await r.json();
@@ -281,7 +294,8 @@ function detectCompletions(rows) {
       if (seenDone && !seenDone[rows[i].id]) isNew = true;
     }
   }
-  if (seenDone && isNew && typeof refreshLibrary === "function") refreshLibrary();
+  if (seenDone && isNew && typeof refreshLibrary === "function")
+    refreshLibrary();
   seenDone = doneNow;
 }
 
@@ -296,7 +310,10 @@ async function refreshJobs() {
     if (jobsPage < 0) jobsPage = 0;
     var start = jobsPage * JOBS_PER_PAGE;
     tbody.innerHTML = rows.length
-      ? rows.slice(start, start + JOBS_PER_PAGE).map(jobRow).join("")
+      ? rows
+          .slice(start, start + JOBS_PER_PAGE)
+          .map(jobRow)
+          .join("")
       : '<tr><td colspan="9" class="muted">No jobs yet. <a href="/add">Add a game.</a></td></tr>';
     renderJobsPager(rows.length, pages);
     hydrateCovers();
@@ -410,9 +427,13 @@ function wireUpload() {
     if (!queueBox) return;
     var rows = [];
     if (current)
-      rows.push(itemRow(current.id, current.file.name, true, current.file.size));
+      rows.push(
+        itemRow(current.id, current.file.name, true, current.file.size),
+      );
     for (var i = 0; i < queue.length; i++)
-      rows.push(itemRow(queue[i].id, queue[i].file.name, false, queue[i].file.size));
+      rows.push(
+        itemRow(queue[i].id, queue[i].file.name, false, queue[i].file.size),
+      );
     queueBox.innerHTML = rows.join("");
   }
 
@@ -500,7 +521,8 @@ function wireUpload() {
   // Queue one or more files. Adding files mid-batch extends the running queue.
   function enqueue(list) {
     if (!list || !list.length) return;
-    for (var i = 0; i < list.length; i++) queue.push({ id: ++seq, file: list[i] });
+    for (var i = 0; i < list.length; i++)
+      queue.push({ id: ++seq, file: list[i] });
     status.classList.remove("hidden");
     text.textContent = "";
     renderQueue();
@@ -579,8 +601,12 @@ function wireSearch() {
     // site so you can find/grab the game. This URL is the only place the link is
     // defined (results are client-rendered); change it below to point anywhere.
     var lib = g.inLibrary ? '<span class="pill">In library</span>' : "";
+    var consoleNumber = g.console === "ps1" ? 7 : 8;
     var webSearch =
-      "https://romsfun.com/browse-all-roms/?q=" + encodeURIComponent(g.title);
+      "https://romsfun.com/browse-all-roms/?q=" +
+      encodeURIComponent(g.title) +
+      "&consoles[]=" +
+      consoleNumber;
     // Box art from libretro's CDN (see coverCandidates). onerror walks the fallback
     // URLs, then hides the image if none exist. loading="lazy" defers off-screen ones.
     var srcs = coverCandidates(g);
@@ -633,7 +659,9 @@ function wireSearch() {
   // Demo / beta / trial disc: by title marker or by a demo/promo serial prefix.
   function isDemo(g) {
     var t = String(g.title || "").toLowerCase();
-    if (/(^|[^a-z])(demo|beta|trial|taikenban|otameshi|tentou)([^a-z]|$)/.test(t))
+    if (
+      /(^|[^a-z])(demo|beta|trial|taikenban|otameshi|tentou)([^a-z]|$)/.test(t)
+    )
       return true;
     var pre = String(g.serial || "")
       .split("-")[0]
@@ -686,7 +714,10 @@ function wireSearch() {
     hideDupes.checked = localStorage.getItem("ps2sync-hide-dupes") === "1";
     hideDupes.addEventListener("change", function () {
       try {
-        localStorage.setItem("ps2sync-hide-dupes", hideDupes.checked ? "1" : "0");
+        localStorage.setItem(
+          "ps2sync-hide-dupes",
+          hideDupes.checked ? "1" : "0",
+        );
       } catch (e) {
         /* private mode */
       }
@@ -697,7 +728,10 @@ function wireSearch() {
     hideDemos.checked = localStorage.getItem("ps2sync-hide-demos") !== "0"; // default on
     hideDemos.addEventListener("change", function () {
       try {
-        localStorage.setItem("ps2sync-hide-demos", hideDemos.checked ? "1" : "0");
+        localStorage.setItem(
+          "ps2sync-hide-demos",
+          hideDemos.checked ? "1" : "0",
+        );
       } catch (e) {
         /* private mode */
       }
