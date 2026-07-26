@@ -478,8 +478,10 @@ function wireSearch() {
   if (!q) return;
   var results = document.getElementById("search-results");
   var status = document.getElementById("search-status");
+  var hideDupes = document.getElementById("hide-dupes");
   var timer = null,
-    seq = 0;
+    seq = 0,
+    lastHits = [];
 
   function card(g) {
     // Metadata only — no game files hosted here. The title links out to an external
@@ -518,9 +520,44 @@ function wireSearch() {
     );
   }
 
+  function normTitle(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+  // Collapse same-console/same-title region variants down to the first one.
+  function collapse(hits) {
+    if (!hideDupes || !hideDupes.checked) return hits;
+    var seen = {},
+      out = [];
+    for (var i = 0; i < hits.length; i++) {
+      var k = hits[i].console + "|" + normTitle(hits[i].title);
+      if (seen[k]) continue;
+      seen[k] = 1;
+      out.push(hits[i]);
+    }
+    return out;
+  }
+  function render() {
+    var shown = collapse(lastHits);
+    var hidden = lastHits.length - shown.length;
+    status.textContent = shown.length
+      ? shown.length +
+        " result" +
+        (shown.length === 1 ? "" : "s") +
+        (lastHits.length >= 60 ? " (first 60 — narrow your search)" : "") +
+        (hidden > 0
+          ? " · " + hidden + " regional dup" + (hidden === 1 ? "" : "s") + " hidden"
+          : "")
+      : "No matches.";
+    results.innerHTML = shown.map(card).join("");
+  }
+
   async function run() {
     var term = q.value.trim();
     if (term.length < 2) {
+      lastHits = [];
       results.innerHTML = "";
       status.innerHTML = "";
       return;
@@ -530,13 +567,8 @@ function wireSearch() {
     try {
       var hits = await getJSON("/api/search?q=" + encodeURIComponent(term));
       if (mine !== seq) return; // a newer query already fired
-      status.textContent = hits.length
-        ? hits.length +
-          " result" +
-          (hits.length === 1 ? "" : "s") +
-          (hits.length >= 60 ? " (showing first 60 — narrow your search)" : "")
-        : "No matches.";
-      results.innerHTML = hits.map(card).join("");
+      lastHits = hits;
+      render();
     } catch (e) {
       status.textContent = "Search failed.";
     }
@@ -546,6 +578,17 @@ function wireSearch() {
     clearTimeout(timer);
     timer = setTimeout(run, 250);
   });
+  if (hideDupes) {
+    hideDupes.checked = localStorage.getItem("ps2sync-hide-dupes") === "1";
+    hideDupes.addEventListener("change", function () {
+      try {
+        localStorage.setItem("ps2sync-hide-dupes", hideDupes.checked ? "1" : "0");
+      } catch (e) {
+        /* private mode */
+      }
+      render();
+    });
+  }
 }
 
 // --- row actions (Library): delegated ----------------------------------------

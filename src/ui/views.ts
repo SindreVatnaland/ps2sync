@@ -149,6 +149,9 @@ export function searchView(): string {
     <a href="/add">Add</a> page. Metadata only: no game files, no download links.</p>
   <label for="search-q">Search by title or serial</label>
   <input id="search-q" type="text" placeholder="e.g. Gran Turismo, or SLUS-20946" autocomplete="off" autofocus>
+  <label style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem">
+    <input type="checkbox" id="hide-dupes"> Hide regional duplicates (one entry per title)
+  </label>
   <p class="muted small">Type at least 2 characters.</p>
 </div>
 <div id="search-status" class="muted small"></div>
