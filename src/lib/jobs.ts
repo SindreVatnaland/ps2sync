@@ -202,9 +202,17 @@ async function runPipeline(id: string, opts: JobOverrides): Promise<void> {
       game = await placePs1({ serial: info.serial, title: info.title, vcdPath, sizeBytes });
     } else {
       setState(id, 'placing', { progress: P_PLACING, error: null });
-      const sizeBytes = (await fsp.stat(primary)).size;
+      // A PS2 CD dump can arrive as .bin/.cue; selectImages picks the .cue, but the
+      // real image is the .bin it references — place that, not the ~85-byte cue text.
+      let imageFile = primary;
+      if (primary.toLowerCase().endsWith('.cue')) {
+        const bin = (await cueBins(primary))[0];
+        if (!bin) throw new Error('cue references no .bin file');
+        imageFile = path.join(path.dirname(primary), bin);
+      }
+      const sizeBytes = (await fsp.stat(imageFile)).size;
       const media = info.media === 'cd' ? 'cd' : 'dvd'; // identify never returns 'pops' for ps2
-      game = await placePs2({ serial: info.serial, console: 'ps2', title: info.title, media, isoPath: primary, sizeBytes });
+      game = await placePs2({ serial: info.serial, console: 'ps2', title: info.title, media, isoPath: imageFile, sizeBytes });
     }
 
     setState(id, 'ready', { gameId: game.id, progress: 1, error: null });

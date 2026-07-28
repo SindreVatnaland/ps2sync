@@ -88,6 +88,7 @@ label{display:block;margin:.25rem 0 .75rem;color:var(--muted);font-size:.9rem}
 .btn{
   display:inline-block;padding:.45rem .8rem;border-radius:6px;cursor:pointer;
   background:var(--panel2);color:var(--fg);border:1px solid var(--border);
+  white-space:nowrap;
 }
 .btn:hover{filter:brightness(1.15)}
 .btn.primary{background:var(--accent);color:var(--accent-fg);border-color:transparent;font-weight:600}
