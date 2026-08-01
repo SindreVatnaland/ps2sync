@@ -41,14 +41,15 @@ RUN npm prune --omit=dev
 
 # ---------------------------------------------------------------------------
 # Stage 3: runtime — slim, non-root, only the artefacts + CLI tools it shells to.
-# p7zip-full (archive extraction), cue2pops (PS1 conversion, from stage 1).
+# p7zip-full (archive extraction), mame-tools (chdman, for .chd expansion),
+# cue2pops (PS1 conversion, from stage 1).
 # ponytail: p7zip-full covers .zip/.7z; .rar needs the non-free p7zip-rar codec.
 # Ceiling: .rar uploads fail to extract. Upgrade path: enable contrib repo + add p7zip-rar.
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
 RUN apt-get update \
- && apt-get install -y --no-install-recommends p7zip-full ca-certificates \
+ && apt-get install -y --no-install-recommends p7zip-full mame-tools ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 # cue2pops binary from stage 1 (PS1 .bin/.cue -> POPStarter .VCD).

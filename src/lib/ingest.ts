@@ -16,8 +16,10 @@ import { config } from '../config.js';
 
 const execFileP = promisify(execFile);
 
-// Accepted image formats (PS1 .bin/.cue/.img/.mdf, PS2 .iso) and archive containers.
-const IMAGE_EXTENSIONS = ['.iso', '.bin', '.cue', '.img', '.mdf'];
+// Accepted image formats (PS1 .bin/.cue/.img/.mdf, PS2 .iso, MAME-compressed .chd)
+// and archive containers. A .chd is expanded to a raw image by chdToImage before
+// the rest of the pipeline (identify/cook/convert) sees it.
+const IMAGE_EXTENSIONS = ['.iso', '.bin', '.cue', '.img', '.mdf', '.chd'];
 const ARCHIVE_EXTENSIONS = ['.zip', '.7z', '.rar'];
 
 /** True if `name` ends in an accepted image OR archive extension. Used by routes
@@ -368,6 +370,43 @@ export async function extractArchive(filePath: string, destDir: string): Promise
   return entries
     .filter((e) => e.isFile() && isImageExtension(e.name))
     .map((e) => path.join((e as { parentPath?: string }).parentPath ?? destDir, e.name));
+}
+
+/**
+ * Expand a CHD (MAME "Compressed Hunks of Data" disc image) into a raw image the
+ * rest of the pipeline understands, written into `destDir`. Returns the path to
+ * the extracted primary: a `.cue` (CD — PS2 blue-disc / PS1, paired `.bin` beside
+ * it) or a `.iso` (DVD). Tries the CD form first since it carries track metadata,
+ * then DVD, then raw for older `createraw` chds — chdman rejects a mismatched
+ * extract type, so a wrong attempt simply falls through to the next.
+ * ponytail: brute try-chain instead of parsing `chdman info`. Ceiling: up to two
+ * fast failed calls before the right one. Upgrade path: read the metadata first.
+ */
+export async function chdToImage(chdPath: string, destDir: string): Promise<string> {
+  await fsp.mkdir(destDir, { recursive: true });
+  const stem = path.basename(chdPath).replace(/\.chd$/i, '');
+  const cue = path.join(destDir, `${stem}.cue`);
+  const bin = path.join(destDir, `${stem}.bin`);
+  const iso = path.join(destDir, `${stem}.iso`);
+  const attempts: Array<{ args: string[]; out: string }> = [
+    { args: ['extractcd', '-i', chdPath, '-o', cue, '-ob', bin, '-f'], out: cue },
+    { args: ['extractdvd', '-i', chdPath, '-o', iso, '-f'], out: iso },
+    { args: ['extractraw', '-i', chdPath, '-o', iso, '-f'], out: iso },
+  ];
+  let last: unknown;
+  for (const { args, out } of attempts) {
+    try {
+      await execFileP('chdman', args, { maxBuffer: 8 * 1024 * 1024 });
+      return out;
+    } catch (err) {
+      last = err;
+      if ((err as { code?: string }).code === 'ENOENT') {
+        throw new Error('chdman not found — CHD support needs mame-tools in the image');
+      }
+    }
+  }
+  const e = last as { stderr?: string; message?: string };
+  throw new Error(`chdman could not extract ${path.basename(chdPath)}: ${e?.stderr || e?.message}`);
 }
 
 /** Streaming SHA-256 of a file (for dedupe / identify). Never buffers the file. */

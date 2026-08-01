@@ -102,9 +102,9 @@ export function addView(): string {
   <div id="dropzone" class="dropzone">
     <p>Drag &amp; drop one or more disc images here, or <label class="link" for="file-input" style="display:inline">choose files</label>.</p>
     <input id="file-input" type="file" multiple
-      accept=".iso,.bin,.cue,.img,.mdf,.zip,.7z,.rar" hidden>
+      accept=".iso,.bin,.cue,.img,.mdf,.chd,.zip,.7z,.rar" hidden>
     <p class="muted small">Accepted: PS2 <code>.iso</code>, PS1 <code>.bin/.cue</code> (also <code>.img .mdf</code>),
-      and <code>.zip/.7z/.rar</code> archives.</p>
+      compressed <code>.chd</code>, and <code>.zip/.7z/.rar</code> archives.</p>
   </div>
 
   <form method="post" action="/url">

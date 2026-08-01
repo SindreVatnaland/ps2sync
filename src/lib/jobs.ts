@@ -16,7 +16,7 @@ import { db } from '../db/index.js';
 import { jobs, type Job, type NewJob, type Game } from '../db/schema.js';
 import type { Console, Media, JobState } from '../types.js';
 import { incomingDir, incomingJobDir } from './paths.js';
-import { downloadUrl, extractArchive } from './ingest.js';
+import { downloadUrl, extractArchive, chdToImage } from './ingest.js';
 import { identify, cookRawImage } from './identify.js';
 import { ensureCue, convertPs1 } from './convert.js';
 import { checkDuplicate, placePs1, placePs2 } from './place.js';
@@ -173,8 +173,15 @@ async function runPipeline(id: string, opts: JobOverrides): Promise<void> {
     await fsp.rm(jobWork, { recursive: true, force: true }); // clear any stale scratch
     const images = selectImages(await extractArchive(source, jobWork));
     if (images.length === 0) throw new Error('archive contained no supported image files');
-    const primary = images[0];
+    let primary = images[0];
     for (const extra of images.slice(1)) await createChildJob(job, extra);
+
+    // 2b. CHD is a compressed container — expand it to a raw image (DVD -> .iso,
+    // CD -> .cue/.bin) so identify/cook/convert downstream work unchanged.
+    if (primary.toLowerCase().endsWith('.chd')) {
+      setState(id, 'converting', { progress: P_CONVERT_START, error: null });
+      primary = await chdToImage(primary, jobWork);
+    }
 
     // 3. Identify (serial from SYSTEM.CNF, title via gamedb), honouring overrides.
     setState(id, 'identifying', { progress: P_IDENTIFY, error: null });
