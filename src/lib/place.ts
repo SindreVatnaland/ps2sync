@@ -41,6 +41,13 @@ export function checkDuplicate(serial: string, console: Console): Game | null {
   );
 }
 
+// Canonical on-disk name for a placed game: "<DISC_ID>.<Title>.<ext>" (OPL naming).
+// The single source of truth for both placement and the startup rename migration.
+function stagedName(serial: string, title: string, ext: string): string {
+  const discId = oplId(serial); // e.g. SLUS-20174 -> SLUS_201.74; FAT-safe
+  return `${discId}.${sanitizeTitle(title) || discId}.${ext}`;
+}
+
 // Move src -> dest, idempotently. A prior (crashed) run may already have moved it.
 async function moveFile(src: string, dest: string): Promise<void> {
   if (!existsSync(src)) {
@@ -61,10 +68,8 @@ async function moveFile(src: string, dest: string): Promise<void> {
 export async function placePs2(input: PlacePs2Input): Promise<Game> {
   const { serial, title, media, isoPath, sizeBytes } = input;
   // OPL matches ISOs (and art) by the disc id in "SLUS_201.74" form, NOT the raw
-  // "SLUS-20174" — a raw-serial filename connects but never lists. oplId is FAT-safe.
-  const discId = oplId(serial);
-  const safeTitle = sanitizeTitle(title) || discId; // fall back to the id if it empties
-  const filename = `${discId}.${safeTitle}.iso`; // e.g. SLUS_201.02.Game Name.iso
+  // "SLUS-20174" — a raw-serial filename connects but never lists.
+  const filename = stagedName(serial, title, 'iso'); // e.g. SLUS_201.02.Game Name.iso
   const destDir = media === 'cd' ? cdDir : dvdDir;
   const bucket = media === 'cd' ? 'CD' : 'DVD';
 
@@ -95,9 +100,7 @@ export async function placePs2(input: PlacePs2Input): Promise<Game> {
 // inside the .VCD regardless of filename).
 export async function placePs1(input: PlacePs1Input): Promise<Game> {
   const { serial, title, vcdPath, sizeBytes } = input;
-  const discId = oplId(serial); // POPStarter/art key the same "SLUS_007.28" way
-  const safeTitle = sanitizeTitle(title) || discId;
-  const filename = `${discId}.${safeTitle}.VCD`;
+  const filename = stagedName(serial, title, 'VCD'); // POPStarter/art key the same way
 
   await fs.mkdir(popsDir, { recursive: true });
   await moveFile(vcdPath, path.join(popsDir, filename));
@@ -125,4 +128,29 @@ export async function deleteGame(game: Game): Promise<void> {
   await fs.rm(path.join(DATA_DIR, game.stagedPath), { recursive: true, force: true });
   await removeCoverArt(game.serial); // drop its ART/<BOOT_ID>_COV.png too
   db.delete(games).where(eq(games.id, game.id)).run();
+}
+
+// Self-heal at startup: older builds named files with the raw serial
+// ("SLUS-20174.…"), which OPL ignores over SMB. Rename any file whose name no
+// longer matches the canonical OPL disc-id form and fix its staged_path.
+// Idempotent — a no-op once every row has converged, so it's safe every boot.
+// (Cover art was always keyed by oplId, so ART/ needs no migration.)
+export async function reconcileNames(): Promise<void> {
+  let fixed = 0;
+  for (const g of db.select().from(games).all()) {
+    const dir = path.dirname(g.stagedPath); // "CD" | "DVD" | "POPS"
+    const ext = path.extname(g.stagedPath).slice(1); // "iso" | "VCD"
+    const want = path.join(dir, stagedName(g.serial, g.title, ext));
+    if (want === g.stagedPath) continue; // already canonical
+    const from = path.join(DATA_DIR, g.stagedPath);
+    if (!existsSync(from)) continue; // file gone/already moved — leave the row alone
+    try {
+      await moveFile(from, path.join(DATA_DIR, want));
+      db.update(games).set({ stagedPath: want }).where(eq(games.id, g.id)).run();
+      fixed++;
+    } catch (err) {
+      console.warn(`reconcileNames: ${g.stagedPath} -> ${want} failed: ${(err as Error).message}`);
+    }
+  }
+  if (fixed) console.log(`reconcileNames: renamed ${fixed} game file(s) to OPL disc-id form`);
 }
