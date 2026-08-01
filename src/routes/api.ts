@@ -7,6 +7,7 @@ import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
 import { deleteGame } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
+import { listApps, installApp } from '../lib/apps.js';
 import { getServerLanIp, setServerLanIp, isValidLanIp } from '../lib/settings.js';
 import { libraryTablesHtml } from '../ui/views.js';
 import type { Console } from '../types.js';
@@ -116,4 +117,14 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
 
   // Clear all finished/failed/duplicate jobs at once.
   app.post('/api/jobs/clear', async () => ({ cleared: await jobs.clearFinishedJobs() }));
+
+  // Homebrew apps: catalog + on-disk state, and "download latest into APPS/".
+  app.get('/api/apps', async () => listApps());
+  app.post<{ Params: { key: string } }>('/api/apps/:key/install', async (req, reply) => {
+    try {
+      return await installApp(req.params.key);
+    } catch (err) {
+      return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
 }

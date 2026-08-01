@@ -940,11 +940,91 @@ async function refreshStorage() {
   }
 }
 
+// --- apps (Apps page) --------------------------------------------------------
+
+function wireApps() {
+  var list = document.getElementById("apps-list");
+  if (!list) return; // not on the apps page
+  var q = document.getElementById("apps-q");
+  var all = [];
+
+  function render() {
+    var term = (q.value || "").trim().toLowerCase();
+    var apps = all.filter(function (a) {
+      return !term || (a.name + " " + a.blurb).toLowerCase().indexOf(term) !== -1;
+    });
+    list.classList.remove("muted");
+    if (!apps.length) {
+      list.innerHTML = '<p class="muted small">No matching apps.</p>';
+      return;
+    }
+    list.innerHTML = apps
+      .map(function (a) {
+        return (
+          '<div class="app-row"><div>' +
+          "<strong>" +
+          esc(a.name) +
+          "</strong>" +
+          (a.version ? ' <span class="pill">' + esc(a.version) + "</span>" : "") +
+          (a.installed ? ' <span class="pill">on share</span>' : "") +
+          '<div class="muted small">' +
+          esc(a.blurb) +
+          "</div></div>" +
+          '<button class="btn small" data-app="' +
+          esc(a.key) +
+          '">' +
+          (a.installed ? "Update" : "Download") +
+          "</button>" +
+          '<span class="app-msg small muted" data-msg="' +
+          esc(a.key) +
+          '"></span></div>'
+        );
+      })
+      .join("");
+  }
+
+  function load() {
+    getJSON("/api/apps")
+      .then(function (apps) {
+        all = apps;
+        render();
+      })
+      .catch(function () {
+        list.textContent = "Failed to load apps.";
+      });
+  }
+
+  q.addEventListener("input", render);
+  list.addEventListener("click", async function (e) {
+    var btn = e.target.closest("button[data-app]");
+    if (!btn) return;
+    var key = btn.dataset.app;
+    var msg = list.querySelector('[data-msg="' + key + '"]');
+    btn.disabled = true;
+    if (msg) msg.textContent = "Downloading…";
+    try {
+      var r = await fetch("/api/apps/" + key + "/install", {
+        method: "POST",
+        headers: { accept: "application/json" },
+      });
+      var body = await r.json();
+      if (!r.ok) throw new Error(body.error || "install failed");
+      if (msg) msg.textContent = "Saved " + (body.version || "") + " to APPS/";
+      load();
+    } catch (err) {
+      btn.disabled = false;
+      if (msg) msg.textContent = "Failed: " + err.message;
+    }
+  });
+  load();
+}
+
 // --- boot --------------------------------------------------------------------
 
 wireUpload();
 wireLibrary();
 wireSearch();
+wireApps();
 wireGuideIp();
 hydrateCovers(); // fill covers for the server-rendered library rows
 

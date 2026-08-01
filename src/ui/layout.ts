@@ -18,6 +18,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { key: 'library', href: '/', label: 'Library' },
   { key: 'search', href: '/search', label: 'Search' },
+  { key: 'apps', href: '/apps', label: 'Apps' },
   { key: 'guide', href: '/guide', label: 'Setup guide' },
 ];
 
@@ -96,6 +97,9 @@ label{display:block;margin:.25rem 0 .75rem;color:var(--muted);font-size:.9rem}
 .btn.small{padding:.3rem .55rem;font-size:.82rem}
 .link{color:var(--accent);cursor:pointer}
 .badge{display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.78rem;border:1px solid var(--border)}
+.app-row{display:flex;align-items:center;gap:.6rem;padding:.6rem 0;border-top:1px solid var(--border)}
+.app-row>div:first-child{flex:1;min-width:0}
+.app-msg{white-space:nowrap}
 .badge.ok{color:var(--badge-ok-fg);border-color:var(--badge-ok-bd)}
 .badge.pending{color:var(--muted)}
 .badge.busy{color:var(--badge-busy-fg);border-color:var(--badge-busy-bd)}

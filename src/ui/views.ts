@@ -201,6 +201,22 @@ export function loginView(error?: string): string {
 
 // --- PS2 setup guide ---------------------------------------------------------
 
+// Apps page: a searchable, curated catalog of homebrew ELFs. The list + install
+// buttons are hydrated by public/app.js from /api/apps.
+export function appsView(): string {
+  return `
+<div class="card">
+  <h1>Apps</h1>
+  <p class="muted">Homebrew for your PS2. Download drops the latest build into the
+    <code>APPS/</code> folder on the share; then on the console open <strong>wLaunchELF</strong>,
+    browse the SMB share to <code>APPS/</code>, and copy the ELF to your memory card
+    (<code>mc0:</code>) over ethernet. ps2sync never writes to the console — it pulls.</p>
+  <label for="apps-q">Search apps</label>
+  <input id="apps-q" type="text" placeholder="e.g. loader, file manager…" autocomplete="off">
+  <div id="apps-list" class="muted">Loading…</div>
+</div>`;
+}
+
 export function guideView(): string {
   return `<h1>Connect your PS2 to this server</h1>
 <p class="muted">Do this once to get homebrew and Open PS2 Loader (OPL) running on the console. After that,
