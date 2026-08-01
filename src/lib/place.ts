@@ -1,6 +1,6 @@
 // Move finished images into the OPL / POPStarter layout and record the games row.
-//   PS2 .iso   -> /data/DVD or /data/CD as "<SERIAL>.<Title>.iso" (OPL naming)
-//   PS1 .VCD   -> /data/POPS as "<Title>.VCD"          (POPStarter menu name)
+//   PS2 .iso   -> /data/DVD or /data/CD as "<DISC_ID>.<Title>.iso" (OPL naming, e.g. SLUS_201.74)
+//   PS1 .VCD   -> /data/POPS as "<DISC_ID>.<Title>.VCD"           (POPStarter menu name)
 // The sibling Samba container shares these dirs; the PS2 pulls from them over SMB.
 import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -12,7 +12,7 @@ import { games, type Game } from '../db/schema.js';
 import type { Console } from '../types.js';
 import { sanitizeTitle } from './sanitize.js';
 import { DATA_DIR, dvdDir, cdDir, popsDir } from './paths.js';
-import { ensureCoverArt, removeCoverArt } from './art.js';
+import { ensureCoverArt, removeCoverArt, oplId } from './art.js';
 
 export interface PlacePs2Input {
   serial: string;
@@ -60,9 +60,11 @@ async function moveFile(src: string, dest: string): Promise<void> {
 // Place a PS2 image into DVD/ or CD/ as "<SERIAL>.<Title>.iso" and insert the row.
 export async function placePs2(input: PlacePs2Input): Promise<Game> {
   const { serial, title, media, isoPath, sizeBytes } = input;
-  const safeSerial = sanitizeTitle(serial) || 'UNKNOWN'; // strip any FAT-forbidden chars
-  const safeTitle = sanitizeTitle(title) || safeSerial; // fall back to the serial if it empties
-  const filename = `${safeSerial}.${safeTitle}.iso`; // e.g. SLUS-20102.Game Name.iso
+  // OPL matches ISOs (and art) by the disc id in "SLUS_201.74" form, NOT the raw
+  // "SLUS-20174" — a raw-serial filename connects but never lists. oplId is FAT-safe.
+  const discId = oplId(serial);
+  const safeTitle = sanitizeTitle(title) || discId; // fall back to the id if it empties
+  const filename = `${discId}.${safeTitle}.iso`; // e.g. SLUS_201.02.Game Name.iso
   const destDir = media === 'cd' ? cdDir : dvdDir;
   const bucket = media === 'cd' ? 'CD' : 'DVD';
 
@@ -93,9 +95,9 @@ export async function placePs2(input: PlacePs2Input): Promise<Game> {
 // inside the .VCD regardless of filename).
 export async function placePs1(input: PlacePs1Input): Promise<Game> {
   const { serial, title, vcdPath, sizeBytes } = input;
-  const safeSerial = sanitizeTitle(serial) || 'UNKNOWN';
-  const safeTitle = sanitizeTitle(title) || safeSerial;
-  const filename = `${safeSerial}.${safeTitle}.VCD`;
+  const discId = oplId(serial); // POPStarter/art key the same "SLUS_007.28" way
+  const safeTitle = sanitizeTitle(title) || discId;
+  const filename = `${discId}.${safeTitle}.VCD`;
 
   await fs.mkdir(popsDir, { recursive: true });
   await moveFile(vcdPath, path.join(popsDir, filename));
