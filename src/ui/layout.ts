@@ -100,6 +100,10 @@ label{display:block;margin:.25rem 0 .75rem;color:var(--muted);font-size:.9rem}
 .app-row{display:flex;align-items:center;gap:.6rem;padding:.6rem 0;border-top:1px solid var(--border)}
 .app-row>div:first-child{flex:1;min-width:0}
 .app-msg{white-space:nowrap}
+.pill-warn{color:var(--accent-fg);background:var(--accent);border-color:transparent}
+.apps-auto{display:flex;align-items:center;gap:.4rem;margin-top:1rem;color:var(--fg)}
+.apps-auto input{width:auto;margin:0}
+.nav-badge{display:inline-block;min-width:1.1em;margin-left:.35em;padding:0 .35em;border-radius:999px;background:var(--danger);color:#fff;font-size:.7rem;text-align:center}
 .badge.ok{color:var(--badge-ok-fg);border-color:var(--badge-ok-bd)}
 .badge.pending{color:var(--muted)}
 .badge.busy{color:var(--badge-busy-fg);border-color:var(--badge-busy-bd)}

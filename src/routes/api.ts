@@ -7,8 +7,8 @@ import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
 import { deleteGame } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
-import { listApps, installApp } from '../lib/apps.js';
-import { getServerLanIp, setServerLanIp, isValidLanIp } from '../lib/settings.js';
+import { listApps, checkApps, installApp } from '../lib/apps.js';
+import { getServerLanIp, setServerLanIp, isValidLanIp, getAppsAutoUpdate, setAppsAutoUpdate } from '../lib/settings.js';
 import { libraryTablesHtml } from '../ui/views.js';
 import type { Console } from '../types.js';
 
@@ -89,7 +89,7 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/storage', async () => storageSummary());
 
   // Server's LAN IP, shown in the guide as OPL's SMB address. Editable there.
-  app.get('/api/settings', async () => ({ serverLanIp: getServerLanIp() }));
+  app.get('/api/settings', async () => ({ serverLanIp: getServerLanIp(), appsAutoUpdate: getAppsAutoUpdate() }));
   app.post<{ Body: { serverLanIp?: string } }>('/api/settings', async (req, reply) => {
     const ip = (req.body?.serverLanIp ?? '').trim();
     if (!isValidLanIp(ip)) {
@@ -120,11 +120,22 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
 
   // Homebrew apps: catalog + on-disk state, and "download latest into APPS/".
   app.get('/api/apps', async () => listApps());
+
+  // Same list, enriched with the latest available version (cached GitHub lookup)
+  // so the UI can flag updates. Slower than /api/apps — called on demand.
+  app.get('/api/apps/check', async () => checkApps());
+
   app.post<{ Params: { key: string } }>('/api/apps/:key/install', async (req, reply) => {
     try {
       return await installApp(req.params.key);
     } catch (err) {
       return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
     }
+  });
+
+  // Toggle "auto-install minor updates".
+  app.post<{ Body: { enabled?: boolean } }>('/api/apps/auto-update', async (req) => {
+    setAppsAutoUpdate(!!req.body?.enabled);
+    return { appsAutoUpdate: getAppsAutoUpdate() };
   });
 }

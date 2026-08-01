@@ -17,6 +17,15 @@ export function setServerLanIp(ip: string): void {
   setStmt.run('server_lan_ip', ip.trim());
 }
 
+// When on, a startup + 12h timer auto-installs the latest *minor* release of any
+// installed app (major bumps stay notify-only). Default off.
+export function getAppsAutoUpdate(): boolean {
+  return (getStmt.get('apps_auto_update') as { value: string } | undefined)?.value === '1';
+}
+export function setAppsAutoUpdate(on: boolean): void {
+  setStmt.run('apps_auto_update', on ? '1' : '0');
+}
+
 // Accept empty (clears it) or a plain IPv4 literal — OPL's SMB config wants an IP,
 // not a hostname.
 export function isValidLanIp(ip: string): boolean {

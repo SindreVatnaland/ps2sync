@@ -29,7 +29,7 @@ export const CATALOG: AppSpec[] = [
     name: 'Open PS2 Loader',
     repo: 'ps2homebrew/Open-PS2-Loader',
     asset: /^OPNPS2LD\.7z$/,
-    innerElf: /^OPNPS2LD\.ELF$/,
+    innerElf: /^OPNPS2LD.*\.ELF$/i, // archive holds OPNPS2LD-v<ver>.ELF; save as canonical name
     dest: 'OPNPS2LD.ELF',
     blurb: 'Lists & boots your games over SMB. Update this to fix large (>2 GB) DVDs not showing.',
   },
@@ -44,8 +44,10 @@ export const CATALOG: AppSpec[] = [
   },
 ];
 
+// version = the release tag; fingerprint pins the exact asset (so a rolling
+// "latest" tag whose ELF changed still registers as an update).
 interface Manifest {
-  [key: string]: { version: string; at: number };
+  [key: string]: { version: string; fingerprint?: string; at: number };
 }
 const manifestPath = path.join(appsDir, '.versions.json');
 
@@ -57,6 +59,48 @@ async function readManifest(): Promise<Manifest> {
   }
 }
 
+const GH_HEADERS = { 'user-agent': 'ps2sync', accept: 'application/vnd.github+json' };
+
+interface ReleaseAsset {
+  name: string;
+  browser_download_url: string;
+  updated_at: string;
+}
+interface Release {
+  tag_name: string;
+  assets: ReleaseAsset[];
+}
+
+// GitHub is rate-limited (60/hr unauthenticated), so cache release lookups. The
+// list/check UI and the auto-updater all share this — one fetch per app per TTL.
+const relCache = new Map<string, { at: number; rel: Release }>();
+const REL_TTL = 6 * 60 * 60 * 1000; // 6h
+
+function releaseUrl(spec: AppSpec): string {
+  return spec.tag
+    ? `https://api.github.com/repos/${spec.repo}/releases/tags/${spec.tag}`
+    : `https://api.github.com/repos/${spec.repo}/releases/latest`;
+}
+
+async function fetchRelease(spec: AppSpec): Promise<Release> {
+  const url = releaseUrl(spec);
+  const hit = relCache.get(url);
+  if (hit && Date.now() - hit.at < REL_TTL) return hit.rel;
+  const res = await fetch(url, { headers: GH_HEADERS });
+  if (!res.ok) throw new Error(`GitHub ${res.status} fetching ${spec.repo} release`);
+  const rel = (await res.json()) as Release;
+  relCache.set(url, { at: Date.now(), rel });
+  return rel;
+}
+
+function matchAsset(spec: AppSpec, rel: Release): ReleaseAsset {
+  const asset = (rel.assets ?? []).find((a) => spec.asset.test(a.name));
+  if (!asset) throw new Error(`no asset matching ${spec.asset} in ${spec.repo} ${rel.tag_name}`);
+  return asset;
+}
+
+const fingerprint = (rel: Release, asset: ReleaseAsset): string => `${rel.tag_name}:${asset.updated_at}`;
+
 export interface AppStatus {
   key: string;
   name: string;
@@ -66,7 +110,7 @@ export interface AppStatus {
   version: string | null;
 }
 
-// Catalog + on-disk state only — no network. installApp() is what hits GitHub.
+// Catalog + on-disk state only — no network. installApp()/checkApps() hit GitHub.
 export async function listApps(): Promise<AppStatus[]> {
   const m = await readManifest();
   return CATALOG.map((a) => ({
@@ -79,11 +123,44 @@ export async function listApps(): Promise<AppStatus[]> {
   }));
 }
 
-const GH_HEADERS = { 'user-agent': 'ps2sync', accept: 'application/vnd.github+json' };
+export interface AppCheck extends AppStatus {
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  major: boolean; // latest is a major-version bump over what's installed
+  error?: string; // GitHub lookup failed (rate limit / offline) — treated as "no update"
+}
 
-interface Release {
-  tag_name: string;
-  assets: { name: string; browser_download_url: string }[];
+// Enrich each app with the latest available version (cached). Never throws for a
+// single app — a failed lookup just reports no update with an `error` note.
+export async function checkApps(): Promise<AppCheck[]> {
+  const m = await readManifest();
+  const out: AppCheck[] = [];
+  for (const a of CATALOG) {
+    const installed = existsSync(path.join(appsDir, a.dest));
+    const cur = m[a.key];
+    const base: AppStatus = { key: a.key, name: a.name, blurb: a.blurb, file: a.dest, installed, version: cur?.version ?? null };
+    try {
+      const rel = await fetchRelease(a);
+      const fp = fingerprint(rel, matchAsset(a, rel));
+      const updateAvailable = installed && (cur?.fingerprint ? cur.fingerprint !== fp : cur?.version !== rel.tag_name);
+      out.push({ ...base, latestVersion: rel.tag_name, updateAvailable, major: isMajorBump(cur?.version, rel.tag_name) });
+    } catch (err) {
+      out.push({ ...base, latestVersion: null, updateAvailable: false, major: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return out;
+}
+
+// True only when both tags parse as vMAJOR.* and the major increased. Rolling or
+// non-semver tags (e.g. "latest") never count as major — they stay auto-eligible.
+function isMajorBump(from: string | null | undefined, to: string): boolean {
+  const major = (t?: string | null): number | null => {
+    const m = /v?(\d+)\./.exec(t ?? '');
+    return m ? Number(m[1]) : null;
+  };
+  const a = major(from);
+  const b = major(to);
+  return a !== null && b !== null && b > a;
 }
 
 // Download the newest release ELF for `key` into APPS/. Returns its status row.
@@ -91,15 +168,8 @@ export async function installApp(key: string): Promise<AppStatus> {
   const spec = CATALOG.find((a) => a.key === key);
   if (!spec) throw new Error(`unknown app: ${key}`);
 
-  const relUrl = spec.tag
-    ? `https://api.github.com/repos/${spec.repo}/releases/tags/${spec.tag}`
-    : `https://api.github.com/repos/${spec.repo}/releases/latest`;
-  const relRes = await fetch(relUrl, { headers: GH_HEADERS });
-  if (!relRes.ok) throw new Error(`GitHub ${relRes.status} fetching ${spec.repo} release`);
-  const rel = (await relRes.json()) as Release;
-  const asset = (rel.assets ?? []).find((a) => spec.asset.test(a.name));
-  if (!asset) throw new Error(`no asset matching ${spec.asset} in ${spec.repo} ${rel.tag_name}`);
-
+  const rel = await fetchRelease(spec);
+  const asset = matchAsset(spec, rel);
   const dl = await fetch(asset.browser_download_url, { headers: { 'user-agent': 'ps2sync' } });
   if (!dl.ok) throw new Error(`download failed (${dl.status}) for ${asset.name}`);
   const buf = Buffer.from(await dl.arrayBuffer());
@@ -109,10 +179,31 @@ export async function installApp(key: string): Promise<AppStatus> {
   await fsp.writeFile(path.join(appsDir, spec.dest), elf);
 
   const m = await readManifest();
-  m[spec.key] = { version: rel.tag_name, at: Date.now() };
+  m[spec.key] = { version: rel.tag_name, fingerprint: fingerprint(rel, asset), at: Date.now() };
   await fsp.writeFile(manifestPath, JSON.stringify(m, null, 2));
 
   return { key: spec.key, name: spec.name, blurb: spec.blurb, file: spec.dest, installed: true, version: rel.tag_name };
+}
+
+// Auto-update installed apps to the latest *non-major* release. Called on a timer
+// when the toggle is on; skips major bumps (notify-only) and never throws.
+export async function autoUpdateApps(): Promise<void> {
+  let checks: AppCheck[];
+  try {
+    checks = await checkApps();
+  } catch (err) {
+    console.warn(`apps: auto-update check failed: ${(err as Error).message}`);
+    return;
+  }
+  for (const c of checks) {
+    if (!(c.installed && c.updateAvailable && !c.major)) continue;
+    try {
+      const a = await installApp(c.key);
+      console.log(`apps: auto-updated ${c.key} -> ${a.version}`);
+    } catch (err) {
+      console.warn(`apps: auto-update ${c.key} failed: ${(err as Error).message}`);
+    }
+  }
 }
 
 // Pull the one ELF out of a downloaded .7z/.zip via the bundled 7z CLI.

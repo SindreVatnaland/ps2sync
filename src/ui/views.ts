@@ -214,6 +214,8 @@ export function appsView(): string {
   <label for="apps-q">Search apps</label>
   <input id="apps-q" type="text" placeholder="e.g. loader, file manager…" autocomplete="off">
   <div id="apps-list" class="muted">Loading…</div>
+  <label class="apps-auto"><input type="checkbox" id="apps-auto"> Automatically install minor updates
+    <span class="muted small">(checked every 12 h; major versions still ask)</span></label>
 </div>`;
 }
 

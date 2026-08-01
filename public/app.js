@@ -946,6 +946,7 @@ function wireApps() {
   var list = document.getElementById("apps-list");
   if (!list) return; // not on the apps page
   var q = document.getElementById("apps-q");
+  var auto = document.getElementById("apps-auto");
   var all = [];
 
   function render() {
@@ -960,20 +961,29 @@ function wireApps() {
     }
     list.innerHTML = apps
       .map(function (a) {
+        var badge = a.installed ? ' <span class="pill">on share</span>' : "";
+        var update = a.updateAvailable
+          ? ' <span class="pill pill-warn">update: ' +
+            esc(a.latestVersion || "") +
+            (a.major ? " (major)" : "") +
+            "</span>"
+          : "";
+        var btnLabel = a.updateAvailable ? "Update" : a.installed ? "Re-download" : "Download";
         return (
           '<div class="app-row"><div>' +
           "<strong>" +
           esc(a.name) +
           "</strong>" +
           (a.version ? ' <span class="pill">' + esc(a.version) + "</span>" : "") +
-          (a.installed ? ' <span class="pill">on share</span>' : "") +
+          badge +
+          update +
           '<div class="muted small">' +
           esc(a.blurb) +
           "</div></div>" +
           '<button class="btn small" data-app="' +
           esc(a.key) +
           '">' +
-          (a.installed ? "Update" : "Download") +
+          btnLabel +
           "</button>" +
           '<span class="app-msg small muted" data-msg="' +
           esc(a.key) +
@@ -984,13 +994,21 @@ function wireApps() {
   }
 
   function load() {
+    // Fast disk-only list first, then enrich with the (cached) update check.
     getJSON("/api/apps")
       .then(function (apps) {
         all = apps;
         render();
+        return getJSON("/api/apps/check");
+      })
+      .then(function (checked) {
+        if (checked) {
+          all = checked;
+          render();
+        }
       })
       .catch(function () {
-        list.textContent = "Failed to load apps.";
+        if (!all.length) list.textContent = "Failed to load apps.";
       });
   }
 
@@ -1016,7 +1034,41 @@ function wireApps() {
       if (msg) msg.textContent = "Failed: " + err.message;
     }
   });
+
+  if (auto) {
+    getJSON("/api/settings")
+      .then(function (s) {
+        auto.checked = !!s.appsAutoUpdate;
+      })
+      .catch(function () {});
+    auto.addEventListener("change", function () {
+      fetch("/api/apps/auto-update", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ enabled: auto.checked }),
+      }).catch(function () {});
+    });
+  }
   load();
+}
+
+// Badge the Apps nav link when any installed app has an update (runs every page).
+function badgeAppUpdates() {
+  var link = document.querySelector('a.navlink[href="/apps"]');
+  if (!link) return;
+  getJSON("/api/apps/check")
+    .then(function (apps) {
+      var n = (apps || []).filter(function (a) {
+        return a.updateAvailable;
+      }).length;
+      if (n > 0 && !link.querySelector(".nav-badge")) {
+        var b = document.createElement("span");
+        b.className = "nav-badge";
+        b.textContent = n;
+        link.appendChild(b);
+      }
+    })
+    .catch(function () {});
 }
 
 // --- boot --------------------------------------------------------------------
@@ -1025,6 +1077,7 @@ wireUpload();
 wireLibrary();
 wireSearch();
 wireApps();
+badgeAppUpdates();
 wireGuideIp();
 hydrateCovers(); // fill covers for the server-rendered library rows
 
