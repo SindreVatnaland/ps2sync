@@ -17,7 +17,7 @@ import { jobs, type Job, type NewJob, type Game } from '../db/schema.js';
 import type { Console, Media, JobState } from '../types.js';
 import { incomingDir, incomingJobDir } from './paths.js';
 import { downloadUrl, extractArchive } from './ingest.js';
-import { identify } from './identify.js';
+import { identify, cookRawImage } from './identify.js';
 import { ensureCue, convertPs1 } from './convert.js';
 import { checkDuplicate, placePs1, placePs2 } from './place.js';
 
@@ -210,6 +210,10 @@ async function runPipeline(id: string, opts: JobOverrides): Promise<void> {
         if (!bin) throw new Error('cue references no .bin file');
         imageFile = path.join(path.dirname(primary), bin);
       }
+      // A raw .bin (2352-byte sectors) boots to garbage — OPL needs a cooked 2048 ISO.
+      await fsp.mkdir(jobWork, { recursive: true });
+      const cooked = path.join(jobWork, 'cooked.iso');
+      if (await cookRawImage(imageFile, cooked)) imageFile = cooked;
       const sizeBytes = (await fsp.stat(imageFile)).size;
       const media = info.media === 'cd' ? 'cd' : 'dvd'; // identify never returns 'pops' for ps2
       game = await placePs2({ serial: info.serial, console: 'ps2', title: info.title, media, isoPath: imageFile, sizeBytes });

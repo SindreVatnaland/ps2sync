@@ -6,13 +6,14 @@ import { config } from './config.js';
 import { ensureDirs } from './lib/paths.js';
 import * as jobs from './lib/jobs.js';
 import * as gamedb from './lib/gamedb.js';
-import { reconcileNames } from './lib/place.js';
+import { reconcileNames, reconcileImages } from './lib/place.js';
 import { buildServer } from './server.js';
 
 async function main(): Promise<void> {
   ensureDirs();
   await jobs.reconcile(); // re-queue non-terminal jobs, clear stale work dirs
   await reconcileNames(); // rename any legacy raw-serial files to OPL disc-id form
+  await reconcileImages(); // cook any raw 2352-sector CD image left as a bad .iso
   void gamedb.ensureDb(); // fire-and-forget: download the PS2 serial catalogue if stale
 
   const app = buildServer();

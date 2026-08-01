@@ -8,6 +8,7 @@
 // The serial (SLUS_201.02) is normalised to SLUS-20102.
 import { open, readFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
+import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Console, Media, IdentifyResult } from '../types.js';
 
@@ -230,6 +231,56 @@ async function readFileData(reader: SectorReader, lba: number, size: number): Pr
 }
 
 // ---------------------------------------------------------------------------
+// Raw (.bin, 2352-byte sectors) -> cooked 2048-byte ISO
+// ---------------------------------------------------------------------------
+
+// A .bin/.cue rip stores 2352-byte physical sectors; a bootable PS2 .iso needs the
+// bare 2048-byte user data of each. If `src` is such a raw image, write the cooked
+// ISO to `out` and return true. If it's already a 2048-byte ISO (or unrecognised),
+// leave `out` untouched and return false — the caller keeps the original. Uses the
+// same layout detection identify already relies on, so a disc it could read it can cook.
+export async function cookRawImage(src: string, out: string): Promise<boolean> {
+  const fh = await open(src, 'r');
+  try {
+    // Already cooked? ISO9660 puts "CD001" at sector 16 => byte 16*2048+1.
+    const probe = Buffer.alloc(5);
+    await fh.read(probe, 0, 5, 16 * 2048 + 1);
+    if (probe.toString('latin1') === 'CD001') return false;
+
+    const layout = await detectRawLayout(fh);
+    // Only cook if the raw layout actually lands on the ISO9660 magic; otherwise we
+    // don't understand the image and must not mangle it.
+    const check = Buffer.alloc(5);
+    await fh.read(check, 0, 5, 16 * layout.raw + layout.offset + 1);
+    if (check.toString('latin1') !== 'CD001') return false;
+
+    const { size } = await fh.stat();
+    const sectors = Math.floor(size / layout.raw);
+    const outFh = await open(out, 'w');
+    try {
+      const CHUNK = 512; // sectors per read (~1.2 MB), keeps the syscall count down
+      const inBuf = Buffer.alloc(CHUNK * layout.raw);
+      const outBuf = Buffer.alloc(CHUNK * 2048);
+      for (let done = 0; done < sectors; ) {
+        const n = Math.min(CHUNK, sectors - done);
+        await fh.read(inBuf, 0, n * layout.raw, done * layout.raw);
+        for (let i = 0; i < n; i++) {
+          const from = i * layout.raw + layout.offset;
+          inBuf.copy(outBuf, i * 2048, from, from + 2048);
+        }
+        await outFh.write(outBuf, 0, n * 2048);
+        done += n;
+      }
+    } finally {
+      await outFh.close();
+    }
+    return true;
+  } finally {
+    await fh.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // .cue -> .bin resolution
 // ---------------------------------------------------------------------------
 
@@ -260,4 +311,38 @@ async function gamedbTitle(serial: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+// Self-check: `node identify.js` (or `tsx src/lib/identify.ts`). Synthesises a raw
+// Mode 2 image and verifies cookRawImage extracts the 2048-byte user data.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const os = await import('node:os');
+  const { writeFile, unlink } = await import('node:fs/promises');
+  const RAW = 2352;
+  const OFF = 24; // Mode 2 user-data offset
+  const N = 20;
+  const raw = Buffer.alloc(N * RAW);
+  const sync = Buffer.from([0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0]);
+  for (let s = 0; s < N; s++) {
+    sync.copy(raw, s * RAW);
+    raw[s * RAW + 15] = 2; // mode 2 => detectRawLayout picks offset 24
+    raw.writeUInt32LE(s, s * RAW + OFF); // marker = sector number
+    if (s === 16) raw.write('CD001', s * RAW + OFF + 1, 'latin1');
+  }
+  const src = path.join(os.tmpdir(), 'ps2sync-cook-src.bin');
+  const dst = path.join(os.tmpdir(), 'ps2sync-cook-out.iso');
+  await writeFile(src, raw);
+  assert.equal(await cookRawImage(src, dst), true);
+  const cooked = await readFile(dst);
+  assert.equal(cooked.length, N * 2048);
+  assert.equal(cooked.readUInt32LE(5 * 2048), 5); // a plain sector's user data preserved
+  assert.equal(cooked.toString('latin1', 16 * 2048 + 1, 16 * 2048 + 6), 'CD001'); // magic in place
+  // An already-cooked 2048 image must be left alone.
+  const iso = Buffer.alloc(N * 2048);
+  iso.write('CD001', 16 * 2048 + 1, 'latin1');
+  await writeFile(src, iso);
+  assert.equal(await cookRawImage(src, dst), false);
+  await unlink(src);
+  await unlink(dst);
+  console.log('identify cook self-check ok');
 }

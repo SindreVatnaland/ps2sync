@@ -11,6 +11,7 @@ import { db } from '../db/index.js';
 import { games, type Game } from '../db/schema.js';
 import type { Console } from '../types.js';
 import { sanitizeTitle } from './sanitize.js';
+import { cookRawImage } from './identify.js';
 import { DATA_DIR, dvdDir, cdDir, popsDir } from './paths.js';
 import { ensureCoverArt, removeCoverArt, oplId } from './art.js';
 
@@ -153,4 +154,28 @@ export async function reconcileNames(): Promise<void> {
     }
   }
   if (fixed) console.log(`reconcileNames: renamed ${fixed} game file(s) to OPL disc-id form`);
+}
+
+// Self-heal at startup: an early build placed PS2 CD rips as raw 2352-byte/sector
+// .bin content renamed .iso, which boots to garbage video/no sound. Cook any such
+// image to a real 2048-byte ISO in place (temp + atomic rename) and fix its size.
+// Idempotent — a cooked image has CD001 at the 2048 offset, so cookRawImage skips it.
+export async function reconcileImages(): Promise<void> {
+  let fixed = 0;
+  for (const g of db.select().from(games).where(eq(games.console, 'ps2')).all()) {
+    const abs = path.join(DATA_DIR, g.stagedPath);
+    if (!existsSync(abs)) continue;
+    const tmp = `${abs}.cooking`;
+    try {
+      if (!(await cookRawImage(abs, tmp))) continue; // already cooked / unrecognised
+      await fs.rename(tmp, abs); // same dir => atomic replace
+      const sizeBytes = (await fs.stat(abs)).size;
+      db.update(games).set({ sizeBytes }).where(eq(games.id, g.id)).run();
+      fixed++;
+    } catch (err) {
+      await fs.rm(tmp, { force: true }).catch(() => {});
+      console.warn(`reconcileImages: cook ${g.stagedPath} failed: ${(err as Error).message}`);
+    }
+  }
+  if (fixed) console.log(`reconcileImages: cooked ${fixed} raw CD image(s) to 2048-byte ISO`);
 }
