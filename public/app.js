@@ -1174,20 +1174,30 @@ function wireFiles() {
   }
 
   function load() {
+    tbody.innerHTML = '<tr><td colspan="2" class="muted">Loading…</td></tr>';
     getJSON("/api/files?path=" + encodeURIComponent(cur))
       .then(function (d) {
         cur = d.path || "";
         renderCrumbs();
         var rows = "";
-        if (cur) rows += '<tr><td colspan="2"><a href="#" data-dir="' + esc(parentOf(cur)) + '">⬆ ..</a></td></tr>';
+        if (cur)
+          rows += '<tr data-dir="' + esc(parentOf(cur)) + '" style="cursor:pointer"><td colspan="2">⬆ ..</td></tr>';
         if (!d.entries.length) rows += '<tr><td colspan="2" class="muted">Empty folder.</td></tr>';
         d.entries.forEach(function (e) {
           var rel = (cur ? cur + "/" : "") + e.name;
-          var name = e.dir
-            ? '📁 <a href="#" data-dir="' + esc(rel) + '">' + esc(e.name) + "</a>"
-            : '📄 ' + esc(e.name) +
-              ' <a class="link small" href="/files/download?path=' + encodeURIComponent(rel) + '">download</a>';
-          rows += "<tr><td>" + name + "</td><td>" + (e.dir ? "" : fmt(e.size)) + "</td></tr>";
+          if (e.dir) {
+            rows +=
+              '<tr data-dir="' + esc(rel) + '" style="cursor:pointer"><td>📁 ' + esc(e.name) + "</td><td></td></tr>";
+          } else {
+            rows +=
+              "<tr><td>📄 " +
+              esc(e.name) +
+              "</td><td>" +
+              fmt(e.size) +
+              ' · <a class="link small" href="/files/download?path=' +
+              encodeURIComponent(rel) +
+              '">download</a></td></tr>';
+          }
         });
         tbody.innerHTML = rows;
       })
