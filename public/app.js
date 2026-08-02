@@ -1012,6 +1012,28 @@ function wireApps() {
       });
   }
 
+  var allBtn = document.getElementById("apps-install-all");
+  if (allBtn) {
+    var allMsg = document.getElementById("apps-all-msg");
+    allBtn.addEventListener("click", async function () {
+      allBtn.disabled = true;
+      if (allMsg) allMsg.textContent = "Downloading everything… (this takes a bit)";
+      try {
+        var r = await fetch("/api/apps/install-all", { method: "POST", headers: { accept: "application/json" } });
+        var body = await r.json();
+        allBtn.disabled = false;
+        if (!r.ok) throw new Error(body.error || "failed");
+        var txt = "Done: " + (body.done || []).join(", ");
+        if (body.errors && body.errors.length) txt += " · Errors: " + body.errors.join("; ");
+        if (allMsg) allMsg.textContent = txt;
+        load();
+      } catch (err) {
+        allBtn.disabled = false;
+        if (allMsg) allMsg.textContent = "Failed: " + err.message;
+      }
+    });
+  }
+
   q.addEventListener("input", render);
   list.addEventListener("click", async function (e) {
     var btn = e.target.closest("button[data-app]");

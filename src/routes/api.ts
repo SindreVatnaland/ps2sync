@@ -7,7 +7,7 @@ import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
 import { deleteGame } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
-import { listApps, checkApps, installApp } from '../lib/apps.js';
+import { listApps, checkApps, installApp, CATALOG } from '../lib/apps.js';
 import { popsStatus, installPops } from '../lib/pops.js';
 import { getServerLanIp, setServerLanIp, isValidLanIp, getAppsAutoUpdate, setAppsAutoUpdate } from '../lib/settings.js';
 import { libraryTablesHtml } from '../ui/views.js';
@@ -150,5 +150,27 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
     }
+  });
+
+  // One-click "set up everything": every catalog app + the POPStarter core.
+  // Best-effort — reports what succeeded and what failed rather than aborting.
+  app.post('/api/apps/install-all', async () => {
+    const done: string[] = [];
+    const errors: string[] = [];
+    for (const a of CATALOG) {
+      try {
+        await installApp(a.key);
+        done.push(a.name);
+      } catch (err) {
+        errors.push(`${a.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    try {
+      const p = await installPops();
+      done.push(`POPStarter core (${p.placed.length} files, ${p.launchers} launchers)`);
+    } catch (err) {
+      errors.push(`POPStarter core: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return { done, errors };
   });
 }

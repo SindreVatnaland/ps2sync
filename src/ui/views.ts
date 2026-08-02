@@ -208,9 +208,13 @@ export function appsView(): string {
 <div class="card">
   <h1>Apps</h1>
   <p class="muted">Homebrew for your PS2. Download drops the latest build into the
-    <code>APPS/</code> folder on the share; then on the console open <strong>wLaunchELF</strong>,
-    browse the SMB share to <code>APPS/</code>, and copy the ELF to your memory card
-    (<code>mc0:</code>) over ethernet. ps2sync never writes to the console — it pulls.</p>
+    <code>APPS/</code> folder on the share; each app then appears on OPL's <strong>Apps</strong> page
+    (via <code>conf_apps.cfg</code>) to launch over the network. ps2sync never writes to the console — it pulls.</p>
+  <p><button class="btn primary" id="apps-install-all">Set up everything</button>
+    <span id="apps-all-msg" class="small muted"></span></p>
+  <p class="muted small">Grabs OPL (Daily), wLaunchELF, POPStarter SMB Config, and the PS1 POPStarter core in one go.
+    Then on the PS2: launch <strong>OPL (Daily)</strong>, run <strong>POPStarter SMB Config</strong> once, and
+    your PS2 + PS1 games all appear over ethernet.</p>
   <label for="apps-q">Search apps</label>
   <input id="apps-q" type="text" placeholder="e.g. loader, file manager…" autocomplete="off">
   <div id="apps-list" class="muted">Loading…</div>
