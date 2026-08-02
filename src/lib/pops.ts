@@ -93,9 +93,9 @@ export async function pushPopsConfig(ps2ip: string): Promise<{ server: string; f
   const smbCfg = `${server}:445 PS2\nGUEST\n`;
   const ipCfg = `${ip} 255.255.255.0 ${gateway}`;
 
-  const client = new Client(15000);
+  const client = new Client(45000); // PS2Net's FTP is slow — be patient
   try {
-    await client.access({ host: ip, port: 21, secure: false });
+    await client.access({ host: ip, port: 21, user: 'anonymous', password: 'ps2sync', secure: false });
     await client.ensureDir('mc0:/POPSTARTER'); // creates the folder and cwd's into it
     await client.uploadFrom(Readable.from([Buffer.from(smbCfg)]), 'SMBCONFIG.DAT');
     await client.uploadFrom(Readable.from([Buffer.from(ipCfg)]), 'IPCONFIG.DAT');
