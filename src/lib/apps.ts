@@ -42,6 +42,14 @@ export const CATALOG: AppSpec[] = [
     dest: 'wLaunchELF.ELF',
     blurb: 'PS2 file manager — copy new ELFs from the share to your memory card over ethernet.',
   },
+  {
+    key: 'popscfg',
+    name: 'POPStarter SMB Config',
+    repo: 'blckbearx/pops-smb-config',
+    asset: /^pops-smb-config\.elf$/i,
+    dest: 'pops-smb-config.ELF',
+    blurb: "Point POPStarter at your SMB server + set the PS2's static IP so PS1 games load over ethernet. Run once from the Apps page.",
+  },
 ];
 
 // version = the release tag; fingerprint pins the exact asset (so a rolling

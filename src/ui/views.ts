@@ -237,8 +237,18 @@ export function appsView(): string {
     <button class="btn small" id="pops-upload">Upload POPS files</button>
   </details>
   <h3>On the PS2</h3>
-  <p class="muted small">Run an <strong>OPL Daily Build</strong> (download it above), make sure SMB is enabled,
-    and open the <strong>PS1 Games</strong> page — your titles list and boot over ethernet.</p>
+  <ol class="muted small">
+    <li>Run an <strong>OPL Daily Build</strong> and download <strong>POPStarter SMB Config</strong> (both above) —
+      they appear on OPL's <strong>Apps</strong> page.</li>
+    <li><strong>Run POPStarter SMB Config once</strong> (from the Apps page). POPStarter re-inits the network on
+      launch, so it needs its own settings — enter your <strong>SMB server + port</strong>, <strong>share</strong>
+      <code>PS2</code>, user <code>GUEST</code>, blank password, and a <strong>static IP</strong> for the PS2
+      (address / <code>255.255.255.0</code> / your gateway). It saves to <code>mc0:/POPSTARTER/</code>.</li>
+    <li>Launch a PS1 title from the <strong>Apps</strong> page — POPStarter reads that config and boots the
+      <code>.VCD</code> over ethernet.</li>
+  </ol>
+  <p class="muted small">Without step 2, launching a PS1 game just drops you back to the file manager — that's
+    POPStarter with no SMB config.</p>
 </div>`;
 }
 
