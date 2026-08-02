@@ -252,6 +252,25 @@ export function appsView(): string {
 </div>`;
 }
 
+// Files page: browse DATA_DIR, download, and upload into the current folder.
+// Hydrated by public/app.js from /api/files.
+export function filesView(): string {
+  return `
+<div class="card">
+  <h1>Files</h1>
+  <p class="muted">Browse what's on the share (<code>/data</code>) and upload into any folder. Deleting game
+    files here isn't offered — remove games from the Library so the database stays in sync.</p>
+  <div id="files-crumbs" class="muted small"></div>
+  <table><thead><tr><th data-col>Name</th><th data-col>Size</th></tr></thead>
+    <tbody id="files-tbody"><tr><td colspan="2" class="muted">Loading…</td></tr></tbody></table>
+  <div style="margin-top:.8rem">
+    <input id="files-upload" type="file" multiple>
+    <button class="btn small" id="files-upload-btn">Upload to this folder</button>
+    <span id="files-msg" class="small muted"></span>
+  </div>
+</div>`;
+}
+
 export function guideView(): string {
   return `<h1>Connect your PS2 to this server</h1>
 <p class="muted">Do this once to get homebrew and Open PS2 Loader (OPL) running on the console. After that,

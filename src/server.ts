@@ -13,6 +13,7 @@ import { loginView } from './ui/views.js';
 import { pageRoutes } from './routes/pages.js';
 import { ingestRoutes } from './routes/ingest.js';
 import { apiRoutes } from './routes/api.js';
+import { fileRoutes } from './routes/files.js';
 
 const HTML = 'text/html; charset=utf-8';
 // public/ sits next to the compiled output (dist/../public) and next to src/ in dev.
@@ -72,6 +73,7 @@ export function buildServer(): FastifyInstance {
   app.register(pageRoutes);
   app.register(ingestRoutes);
   app.register(apiRoutes);
+  app.register(fileRoutes);
 
   return app;
 }

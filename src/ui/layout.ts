@@ -19,6 +19,7 @@ const NAV: NavItem[] = [
   { key: 'library', href: '/', label: 'Library' },
   { key: 'search', href: '/search', label: 'Search' },
   { key: 'apps', href: '/apps', label: 'Apps' },
+  { key: 'files', href: '/files', label: 'Files' },
   { key: 'guide', href: '/guide', label: 'Setup guide' },
 ];
 

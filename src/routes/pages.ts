@@ -6,7 +6,7 @@ import { asc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { games } from '../db/schema.js';
 import { renderPage } from '../ui/layout.js';
-import { libraryView, addView, searchView, jobsView, guideView, storageView, appsView } from '../ui/views.js';
+import { libraryView, addView, searchView, jobsView, guideView, storageView, appsView, filesView } from '../ui/views.js';
 
 const HTML = 'text/html; charset=utf-8';
 
@@ -34,5 +34,10 @@ export async function pageRoutes(app: FastifyInstance): Promise<void> {
   app.get('/apps', async (_req, reply) => {
     reply.type(HTML);
     return renderPage('Apps', 'apps', appsView());
+  });
+
+  app.get('/files', async (_req, reply) => {
+    reply.type(HTML);
+    return renderPage('Files', 'files', filesView());
   });
 }

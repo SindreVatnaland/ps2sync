@@ -1126,6 +1126,102 @@ function wirePops() {
   loadStatus();
 }
 
+// Files page: browse DATA_DIR, navigate folders, download, upload.
+function wireFiles() {
+  var tbody = document.getElementById("files-tbody");
+  if (!tbody) return; // not on the files page
+  var crumbs = document.getElementById("files-crumbs");
+  var upBtn = document.getElementById("files-upload-btn");
+  var upInput = document.getElementById("files-upload");
+  var msg = document.getElementById("files-msg");
+  var cur = "";
+
+  function fmt(n) {
+    return typeof fmtBytes === "function" ? fmtBytes(n) : n + " B";
+  }
+
+  function renderCrumbs() {
+    var parts = cur ? cur.split("/") : [];
+    var html = '<a href="#" data-path="">/data</a>';
+    var acc = "";
+    for (var i = 0; i < parts.length; i++) {
+      acc = acc ? acc + "/" + parts[i] : parts[i];
+      html += " / " + '<a href="#" data-path="' + esc(acc) + '">' + esc(parts[i]) + "</a>";
+    }
+    crumbs.innerHTML = html;
+  }
+
+  function load() {
+    getJSON("/api/files?path=" + encodeURIComponent(cur))
+      .then(function (d) {
+        cur = d.path || "";
+        renderCrumbs();
+        var rows = "";
+        if (cur) rows += '<tr><td colspan="2"><a href="#" data-dir="' + esc(parentOf(cur)) + '">⬆ ..</a></td></tr>';
+        if (!d.entries.length) rows += '<tr><td colspan="2" class="muted">Empty folder.</td></tr>';
+        d.entries.forEach(function (e) {
+          var rel = (cur ? cur + "/" : "") + e.name;
+          var name = e.dir
+            ? '📁 <a href="#" data-dir="' + esc(rel) + '">' + esc(e.name) + "</a>"
+            : '📄 ' + esc(e.name) +
+              ' <a class="link small" href="/files/download?path=' + encodeURIComponent(rel) + '">download</a>';
+          rows += "<tr><td>" + name + "</td><td>" + (e.dir ? "" : fmt(e.size)) + "</td></tr>";
+        });
+        tbody.innerHTML = rows;
+      })
+      .catch(function () {
+        tbody.innerHTML = '<tr><td colspan="2" class="muted">Failed to load.</td></tr>';
+      });
+  }
+
+  function parentOf(p) {
+    var i = p.lastIndexOf("/");
+    return i === -1 ? "" : p.slice(0, i);
+  }
+
+  tbody.addEventListener("click", function (e) {
+    var d = e.target.closest("[data-dir]");
+    if (d) {
+      e.preventDefault();
+      cur = d.dataset.dir;
+      load();
+    }
+  });
+  crumbs.addEventListener("click", function (e) {
+    var a = e.target.closest("[data-path]");
+    if (a) {
+      e.preventDefault();
+      cur = a.dataset.path;
+      load();
+    }
+  });
+
+  upBtn.addEventListener("click", async function () {
+    if (!upInput.files || !upInput.files.length) {
+      msg.textContent = "Pick file(s) first.";
+      return;
+    }
+    var fd = new FormData();
+    for (var i = 0; i < upInput.files.length; i++) fd.append("file", upInput.files[i]);
+    upBtn.disabled = true;
+    msg.textContent = "Uploading…";
+    try {
+      var r = await fetch("/files/upload?dir=" + encodeURIComponent(cur), { method: "POST", body: fd });
+      var body = await r.json();
+      upBtn.disabled = false;
+      if (!r.ok) throw new Error(body.error || "upload failed");
+      msg.textContent = "Uploaded: " + (body.saved || []).join(", ");
+      upInput.value = "";
+      load();
+    } catch (err) {
+      upBtn.disabled = false;
+      msg.textContent = "Failed: " + err.message;
+    }
+  });
+
+  load();
+}
+
 // Badge the Apps nav link when any installed app has an update (runs every page).
 function badgeAppUpdates() {
   var link = document.querySelector('a.navlink[href="/apps"]');
@@ -1152,6 +1248,7 @@ wireLibrary();
 wireSearch();
 wireApps();
 wirePops();
+wireFiles();
 badgeAppUpdates();
 wireGuideIp();
 hydrateCovers(); // fill covers for the server-rendered library rows
