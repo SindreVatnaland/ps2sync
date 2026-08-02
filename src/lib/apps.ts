@@ -8,7 +8,7 @@ import * as fsp from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { appsDir } from './paths.js';
+import { appsDir, DATA_DIR } from './paths.js';
 
 const execFileP = promisify(execFile);
 
@@ -110,6 +110,18 @@ export interface AppStatus {
   version: string | null;
 }
 
+// Write conf_apps.cfg at the share root so OPL's Apps page lists every downloaded
+// ELF and launches it over SMB — no memory-card copy. Needs an OPL Daily Build
+// (share-root conf_apps.cfg) with SMB + Apps enabled. Regenerated on every install
+// and at startup. OPL maps "smb0:/" to the configured share root.
+export async function writeConfApps(): Promise<void> {
+  const lines = CATALOG.filter((a) => existsSync(path.join(appsDir, a.dest))).map(
+    (a) => `${a.name}=smb0:/APPS/${a.dest}`,
+  );
+  const body = lines.length ? lines.join('\n') + '\n' : '';
+  await fsp.writeFile(path.join(DATA_DIR, 'conf_apps.cfg'), body);
+}
+
 // Catalog + on-disk state only — no network. installApp()/checkApps() hit GitHub.
 export async function listApps(): Promise<AppStatus[]> {
   const m = await readManifest();
@@ -181,6 +193,7 @@ export async function installApp(key: string): Promise<AppStatus> {
   const m = await readManifest();
   m[spec.key] = { version: rel.tag_name, fingerprint: fingerprint(rel, asset), at: Date.now() };
   await fsp.writeFile(manifestPath, JSON.stringify(m, null, 2));
+  await writeConfApps(); // refresh OPL's app list on the share
 
   return { key: spec.key, name: spec.name, blurb: spec.blurb, file: spec.dest, installed: true, version: rel.tag_name };
 }
