@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { games, type Game } from '../db/schema.js';
 import type { Console } from '../types.js';
@@ -131,6 +131,22 @@ export async function deleteGame(game: Game): Promise<void> {
   await fs.rm(path.join(DATA_DIR, game.stagedPath), { recursive: true, force: true });
   await removeCoverArt(game.serial); // drop its ART/<BOOT_ID>_COV.png too
   db.delete(games).where(eq(games.id, game.id)).run();
+}
+
+// Remove PS1 "games" smaller than maxBytes. A real PS1 disc image (.VCD) is
+// hundreds of MB; anything tiny is a stray data file wrongly ingested as a game
+// (e.g. the .bin assets from an extracted-game archive). Deletes each file + row +
+// art, then prunes launchers and refreshes conf_apps. Returns how many it removed.
+export async function purgeSmallPs1(maxBytes: number): Promise<number> {
+  const rows = db
+    .select()
+    .from(games)
+    .where(and(eq(games.console, 'ps1'), lt(games.sizeBytes, maxBytes)))
+    .all();
+  for (const g of rows) await deleteGame(g);
+  await reconcilePs1Launchers(); // prune orphaned launchers + rewrite conf_apps.cfg
+  if (rows.length) console.log(`purgeSmallPs1: removed ${rows.length} bogus PS1 game(s)`);
+  return rows.length;
 }
 
 // Self-heal at startup: older builds named files with the raw serial

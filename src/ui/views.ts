@@ -231,6 +231,8 @@ export function appsView(): string {
   <button class="btn primary" id="pops-install">Download POPStarter core</button>
   <span id="pops-msg" class="small muted"></span>
   <div id="pops-status" class="muted small" style="margin-top:.6rem">Loading…</div>
+  <p style="margin-top:.4rem"><button class="btn small danger" id="pops-purge">Clean up bogus PS1 entries</button>
+    <span class="muted small">Removes PS1 "games" under 50 MB — stray data files from a bad archive, not real discs.</span></p>
   <p class="muted small" style="margin-top:.5rem">These are Sony's PS1 emulator files, mirrored by the
     homebrew community — use them for a console you own.</p>
   <details style="margin-top:.5rem">

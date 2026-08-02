@@ -5,7 +5,7 @@ import { db } from '../db/index.js';
 import { games, jobs as jobsTable } from '../db/schema.js';
 import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
-import { deleteGame } from '../lib/place.js';
+import { deleteGame, purgeSmallPs1 } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp, CATALOG } from '../lib/apps.js';
 import { popsStatus, installPops } from '../lib/pops.js';
@@ -142,6 +142,10 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
 
   // PS1/POPStarter status: which POPS core files are present + game/launcher counts.
   app.get('/api/pops', async () => popsStatus());
+
+  // Clean up bogus tiny PS1 "games" (< 50 MB) — e.g. .bin assets from an
+  // extracted-game archive that got ingested one-per-file.
+  app.post('/api/pops/purge', async () => ({ removed: await purgeSmallPs1(50 * 1024 * 1024) }));
 
   // One-click: fetch the whole POPStarter core into POPS/ and generate launchers.
   app.post('/api/pops/install', async (_req, reply) => {

@@ -1105,6 +1105,26 @@ function wirePops() {
       });
   }
 
+  var purge = document.getElementById("pops-purge");
+  if (purge) {
+    purge.addEventListener("click", async function () {
+      if (!confirm("Remove all PS1 entries smaller than 50 MB? These are bogus data files, not real games.")) return;
+      purge.disabled = true;
+      msg.textContent = "Cleaning up…";
+      try {
+        var r = await fetch("/api/pops/purge", { method: "POST", headers: { accept: "application/json" } });
+        var body = await r.json();
+        purge.disabled = false;
+        if (!r.ok) throw new Error(body.error || "purge failed");
+        msg.textContent = "Removed " + body.removed + " bogus PS1 entr(ies).";
+        loadStatus();
+      } catch (err) {
+        purge.disabled = false;
+        msg.textContent = "Failed: " + err.message;
+      }
+    });
+  }
+
   install.addEventListener("click", async function () {
     install.disabled = true;
     msg.textContent = "Downloading POPStarter core…";

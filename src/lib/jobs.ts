@@ -260,12 +260,19 @@ async function resolveSource(job: Job, progress: (f: number | null) => void): Pr
 }
 
 // An archive may hold a .bin/.cue pair (or a multi-track set: one .cue + many .bin).
-// The .cue references its .bin sidecars, so when any .cue is present the games ARE the
-// .cue files — bare .bin/.img/.mdf are sidecars, not separate jobs. With no .cue (plain
-// PS2 .iso) every image file is its own game.
+// Pick the disc image(s) an archive actually contains, one job per disc:
+//  - any .cue present -> the games ARE the .cue files (their .bin are sidecars);
+//  - else any .iso -> one game per .iso;
+//  - else only bare .bin/.img/.mdf -> take just the FIRST. A pile of bare .bin with
+//    no .cue is a game's extracted data files (assets), not a stack of discs — one
+//    job per file would flood the library with hundreds of bogus "games".
 function selectImages(images: string[]): string[] {
-  const cues = images.filter((f) => f.toLowerCase().endsWith('.cue'));
-  return cues.length ? cues : images;
+  const lower = (f: string): string => f.toLowerCase();
+  const cues = images.filter((f) => lower(f).endsWith('.cue'));
+  if (cues.length) return cues;
+  const isos = images.filter((f) => lower(f).endsWith('.iso'));
+  if (isos.length) return isos;
+  return images.slice(0, 1);
 }
 
 // An archive with >1 game spawns a child job per extra image. Move the image (and,
