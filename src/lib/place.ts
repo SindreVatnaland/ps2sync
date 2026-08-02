@@ -13,7 +13,7 @@ import type { Console } from '../types.js';
 import { sanitizeTitle } from './sanitize.js';
 import { cookRawImage } from './identify.js';
 import { reconcilePs1Launchers } from './pops.js';
-import { DATA_DIR, dvdDir, cdDir, popsDir } from './paths.js';
+import { DATA_DIR, dvdDir, cdDir, popsDir, artDir } from './paths.js';
 import { ensureCoverArt, removeCoverArt, oplId } from './art.js';
 
 export interface PlacePs2Input {
@@ -124,6 +124,20 @@ export async function placePs1(input: PlacePs1Input): Promise<Game> {
   void ensureCoverArt(serial, title, 'ps1'); // fire-and-forget: art must never gate placement
   void reconcilePs1Launchers(); // make this game's POPStarter launcher if the POPS core is present
   return rows[0];
+}
+
+// Re-fetch box art for every game missing a cover (ensureCoverArt skips ones that
+// already have art). Returns how many new covers were added.
+export async function refreshCoverArt(): Promise<{ added: number; total: number }> {
+  const rows = db.select().from(games).all();
+  let added = 0;
+  for (const g of rows) {
+    const dest = path.join(artDir, `${oplId(g.serial)}_COV.png`);
+    const had = existsSync(dest);
+    await ensureCoverArt(g.serial, g.title, g.console);
+    if (!had && existsSync(dest)) added++;
+  }
+  return { added, total: rows.length };
 }
 
 // Remove a game's file and its row. rm -f is idempotent — safe if the file is already gone.

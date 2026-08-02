@@ -5,7 +5,7 @@ import { db } from '../db/index.js';
 import { games, jobs as jobsTable } from '../db/schema.js';
 import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
-import { deleteGame, purgeSmallPs1 } from '../lib/place.js';
+import { deleteGame, purgeSmallPs1, refreshCoverArt } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp, CATALOG } from '../lib/apps.js';
 import { popsStatus, installPops, pushPopsConfig } from '../lib/pops.js';
@@ -139,6 +139,9 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
     setAppsAutoUpdate(!!req.body?.enabled);
     return { appsAutoUpdate: getAppsAutoUpdate() };
   });
+
+  // Re-fetch box art for games missing a cover (index-matched against libretro).
+  app.post('/api/covers/refresh', async () => refreshCoverArt());
 
   // PS1/POPStarter status: which POPS core files are present + game/launcher counts.
   app.get('/api/pops', async () => popsStatus());

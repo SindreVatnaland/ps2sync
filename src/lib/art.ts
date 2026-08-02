@@ -1,10 +1,10 @@
 // Best-effort OPL box art. When a game is placed, drop a front cover in
 // ART/<BOOT_ID>_COV.png — Open PS2 Loader shows it for the game on the console
-// (PS1/POPStarter art works the same way, keyed by the PS1 boot id). The cover comes
-// from libretro's thumbnail CDN (No-Intro name, region derived from the serial). The
-// whole thing is optional and never throws — art must never affect whether a game lands.
-// ponytail: saves the CDN PNG as-is. OPL prefers 140x200 and scales larger art; if it
-// renders slowly on the PS2, resize here (adds an image dependency).
+// (PS1/POPStarter art works the same way, keyed by the boot id). Covers come from
+// libretro's thumbnail CDN. Its filenames carry region/language/version tags and
+// use "_" for "&" (e.g. "Ratchet _ Clank (Europe) (En,Fr,De,Es,It) (v1.00)"), which
+// we can't guess — so we fetch the system's boxart index once and match our title
+// against the real names. The whole thing is optional and never throws.
 import { writeFile, mkdir, rm, access } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -15,34 +15,73 @@ const TIMEOUT_MS = 12_000;
 
 const exists = (p: string): Promise<boolean> => access(p).then(() => true).catch(() => false);
 
-// Disc serial (SLUS-20102) -> OPL boot id (SLUS_201.02) — how OPL names its art files
-// (matched against the game's internal boot id, not the disc filename). Standard ids
-// are 4 letters + 5 digits split 3.2; anything else falls back to a dash->underscore
-// swap. ponytail: covers the usual case; an odd serial just won't get art.
+// Disc serial (SLUS-20102) -> OPL boot id (SLUS_201.02) — how OPL names its art
+// files. Standard ids are 4 letters + 5 digits split 3.2; anything else falls back
+// to a dash->underscore swap.
 export function oplId(serial: string): string {
   const m = serial.toUpperCase().match(/^([A-Z]{4})-?(\d{5})$/);
   return m ? `${m[1]}_${m[2].slice(0, 3)}.${m[2].slice(3)}` : serial.toUpperCase().replace(/-/g, '_');
 }
 
-// Candidate libretro thumbnail URLs, tried in order. Our catalogue titles already use
-// No-Intro's " - " subtitle form; region comes from the serial prefix, with the other
-// regions as fallbacks (PS1 also tries a "(Disc 1)" variant for multi-disc games).
-function candidates(title: string, serial: string, console: Console): string[] {
-  const sys = console === 'ps1' ? 'Sony - PlayStation' : 'Sony - PlayStation 2';
-  const base = `https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/`;
+// Region tag (as libretro writes it) from the serial prefix.
+function regionOf(serial: string): string {
   const pre = serial.split('-')[0].toUpperCase();
-  const region = /^(SLES|SCES|SLED|SCED|SLEH)/.test(pre)
-    ? 'Europe'
-    : /^(SLPS|SLPM|SCPS|SCAJ|SLKA|SCKA|PCPX|SLAJ)/.test(pre)
-      ? 'Japan'
-      : 'USA';
-  const regions = [...new Set([region, 'USA', 'Europe', 'Japan'])];
-  const names: string[] = [];
-  for (const r of regions) {
-    names.push(`${title} (${r})`);
-    if (console === 'ps1') names.push(`${title} (${r}) (Disc 1)`);
+  if (/^(SLES|SCES|SLED|SCED|SLEH)/.test(pre)) return 'Europe';
+  if (/^(SLPS|SLPM|SCPS|SCAJ|SLKA|SCKA|PCPX|SLAJ)/.test(pre)) return 'Japan';
+  return 'USA';
+}
+
+const sysName = (console: Console): string => (console === 'ps1' ? 'Sony - PlayStation' : 'Sony - PlayStation 2');
+const repoName = (console: Console): string => (console === 'ps1' ? 'Sony_-_PlayStation' : 'Sony_-_PlayStation_2');
+
+// Cached list of Named_Boxarts filenames (sans .png) per system — the index we match against.
+const indexCache = new Map<Console, { at: number; names: string[] }>();
+const INDEX_TTL = 24 * 60 * 60 * 1000;
+
+async function boxartIndex(console: Console): Promise<string[]> {
+  const hit = indexCache.get(console);
+  if (hit && Date.now() - hit.at < INDEX_TTL) return hit.names;
+  const url = `https://api.github.com/repos/libretro-thumbnails/${repoName(console)}/git/trees/master?recursive=1`;
+  const res = await fetch(url, {
+    headers: { 'user-agent': 'ps2sync', accept: 'application/vnd.github+json' },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`libretro index ${res.status}`);
+  const data = (await res.json()) as { tree: { path: string }[] };
+  const names = data.tree
+    .map((t) => t.path)
+    .filter((p) => p.startsWith('Named_Boxarts/') && p.endsWith('.png'))
+    .map((p) => p.slice('Named_Boxarts/'.length, -4));
+  indexCache.set(console, { at: Date.now(), names });
+  return names;
+}
+
+// Normalise a title/filename for matching: drop (region)/(lang)/(version) groups,
+// treat & and _ as spaces, keep only alphanumerics.
+export function normTitle(s: string): string {
+  return s
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[&_]/g, ' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// The exact libretro boxart filename (sans .png) for (title, serial), or null.
+async function findBoxart(title: string, serial: string, console: Console): Promise<string | null> {
+  let names: string[];
+  try {
+    names = await boxartIndex(console);
+  } catch {
+    return null;
   }
-  return names.slice(0, 6).map((n) => base + encodeURIComponent(n) + '.png');
+  const want = normTitle(title);
+  if (!want) return null;
+  const matches = names.filter((n) => normTitle(n) === want);
+  if (!matches.length) return null;
+  const rl = regionOf(serial).toLowerCase();
+  // prefer our region, then USA, then whatever came first
+  return matches.find((n) => n.toLowerCase().includes(`(${rl}`)) ?? matches.find((n) => n.toLowerCase().includes('(usa')) ?? matches[0];
 }
 
 // Fetch a cover for (serial, title) and write ART/<BOOT_ID>_COV.png. Skips if present.
@@ -50,22 +89,15 @@ function candidates(title: string, serial: string, console: Console): string[] {
 export async function ensureCoverArt(serial: string, title: string, console: Console): Promise<void> {
   try {
     const dest = path.join(artDir, `${oplId(serial)}_COV.png`);
-    if (await exists(dest)) return; // already have art for this game
-    for (const url of candidates(title, serial, console)) {
-      try {
-        const res = await fetch(url, {
-          headers: { 'user-agent': 'ps2sync' },
-          signal: AbortSignal.timeout(TIMEOUT_MS),
-        });
-        if (!res.ok) continue; // 404 for this name/region — try the next candidate
-        const buf = Buffer.from(await res.arrayBuffer());
-        await mkdir(artDir, { recursive: true });
-        await writeFile(dest, buf);
-        return;
-      } catch {
-        /* network hiccup on this candidate — try the next */
-      }
-    }
+    if (await exists(dest)) return; // already have art
+    const name = await findBoxart(title, serial, console);
+    if (!name) return; // no matching cover in the index
+    const url = `https://thumbnails.libretro.com/${encodeURIComponent(sysName(console))}/Named_Boxarts/${encodeURIComponent(name)}.png`;
+    const res = await fetch(url, { headers: { 'user-agent': 'ps2sync' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!res.ok) return;
+    const buf = Buffer.from(await res.arrayBuffer());
+    await mkdir(artDir, { recursive: true });
+    await writeFile(dest, buf);
   } catch {
     /* art is optional */
   }
@@ -76,17 +108,18 @@ export async function removeCoverArt(serial: string): Promise<void> {
   await rm(path.join(artDir, `${oplId(serial)}_COV.png`), { force: true }).catch(() => {});
 }
 
-// Self-check: `node art.js`.
+// Self-check: `node art.js` (or tsx). Pure logic only — no network.
 if (import.meta.url === `file://${process.argv[1]}`) {
   assert.equal(oplId('SLUS-20102'), 'SLUS_201.02');
-  assert.equal(oplId('SCUS-94163'), 'SCUS_941.63');
-  assert.equal(oplId('SLES-50916'), 'SLES_509.16');
-  assert.equal(oplId('slus-20102'), 'SLUS_201.02'); // case-insensitive
-  const c = candidates('Metal Gear Solid', 'SLUS-00594', 'ps1');
-  assert.ok(decodeURIComponent(c[0]).includes('/Sony - PlayStation/Named_Boxarts/'));
-  assert.ok(decodeURIComponent(c[0]).endsWith('Metal Gear Solid (USA).png'));
-  assert.ok(c.some((u) => decodeURIComponent(u).includes('(Disc 1)'))); // ps1 disc fallback
-  const c2 = candidates('God of War', 'SLES-53509', 'ps2');
-  assert.ok(decodeURIComponent(c2[0]).endsWith('God of War (Europe).png')); // region from SLES
+  assert.equal(oplId('SCES-50916'), 'SCES_509.16');
+  assert.equal(oplId('slus-20102'), 'SLUS_201.02');
+  assert.equal(regionOf('SCES-50916'), 'Europe');
+  assert.equal(regionOf('SLUS-20224'), 'USA');
+  assert.equal(regionOf('SLPS-12345'), 'Japan');
+  // Our titles and libretro's tagged filenames must normalise to the same thing.
+  assert.equal(normTitle('Ratchet & Clank'), 'ratchet clank');
+  assert.equal(normTitle('Ratchet _ Clank (Europe) (En,Fr,De,Es,It) (v1.00)'), 'ratchet clank');
+  assert.equal(normTitle('Pac-Man World 2'), normTitle('Pac-Man World 2 (USA) (v1.00)'));
+  assert.equal(normTitle('Crash Bandicoot 3 - Warped'), normTitle('Crash Bandicoot 3 - Warped (Europe) (En,Fr,De,Es,It)'));
   console.log('art self-check ok');
 }

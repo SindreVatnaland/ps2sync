@@ -1034,6 +1034,25 @@ function wireApps() {
     });
   }
 
+  var covers = document.getElementById("covers-refresh");
+  if (covers) {
+    var coversMsg = document.getElementById("covers-msg");
+    covers.addEventListener("click", async function () {
+      covers.disabled = true;
+      coversMsg.textContent = "Fetching covers…";
+      try {
+        var r = await fetch("/api/covers/refresh", { method: "POST", headers: { accept: "application/json" } });
+        var body = await r.json();
+        covers.disabled = false;
+        if (!r.ok) throw new Error(body.error || "failed");
+        coversMsg.textContent = "Added " + body.added + " cover(s) of " + body.total + " games.";
+      } catch (err) {
+        covers.disabled = false;
+        coversMsg.textContent = "Failed: " + err.message;
+      }
+    });
+  }
+
   q.addEventListener("input", render);
   list.addEventListener("click", async function (e) {
     var btn = e.target.closest("button[data-app]");

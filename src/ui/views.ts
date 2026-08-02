@@ -215,6 +215,8 @@ export function appsView(): string {
   <p class="muted small">Grabs OPL (Daily), wLaunchELF, POPStarter SMB Config, and the PS1 POPStarter core in one go.
     Then on the PS2: launch <strong>OPL (Daily)</strong>, run <strong>POPStarter SMB Config</strong> once, and
     your PS2 + PS1 games all appear over ethernet.</p>
+  <p><button class="btn small" id="covers-refresh">Refresh cover art</button>
+    <span id="covers-msg" class="small muted">Re-fetch box art for any games missing a cover.</span></p>
   <label for="apps-q">Search apps</label>
   <input id="apps-q" type="text" placeholder="e.g. loader, file manager…" autocomplete="off">
   <div id="apps-list" class="muted">Loading…</div>
