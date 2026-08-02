@@ -8,7 +8,7 @@ import * as jobs from '../lib/jobs.js';
 import { deleteGame } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp } from '../lib/apps.js';
-import { popsStatus } from '../lib/pops.js';
+import { popsStatus, installPops } from '../lib/pops.js';
 import { getServerLanIp, setServerLanIp, isValidLanIp, getAppsAutoUpdate, setAppsAutoUpdate } from '../lib/settings.js';
 import { libraryTablesHtml } from '../ui/views.js';
 import type { Console } from '../types.js';
@@ -142,4 +142,13 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
 
   // PS1/POPStarter status: which POPS core files are present + game/launcher counts.
   app.get('/api/pops', async () => popsStatus());
+
+  // One-click: fetch the whole POPStarter core into POPS/ and generate launchers.
+  app.post('/api/pops/install', async (_req, reply) => {
+    try {
+      return await installPops();
+    } catch (err) {
+      return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
 }

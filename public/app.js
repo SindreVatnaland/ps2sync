@@ -1054,11 +1054,12 @@ function wireApps() {
 
 // PS1 / POPStarter setup (Apps page): upload the POPS core files + show status.
 function wirePops() {
+  var status = document.getElementById("pops-status");
+  if (!status) return; // not on the apps page
+  var install = document.getElementById("pops-install");
   var input = document.getElementById("pops-file");
-  if (!input) return; // not on the apps page
   var btn = document.getElementById("pops-upload");
   var msg = document.getElementById("pops-msg");
-  var status = document.getElementById("pops-status");
 
   function loadStatus() {
     getJSON("/api/pops")
@@ -1081,6 +1082,23 @@ function wirePops() {
         status.textContent = "Could not load POPS status.";
       });
   }
+
+  install.addEventListener("click", async function () {
+    install.disabled = true;
+    msg.textContent = "Downloading POPStarter core…";
+    try {
+      var r = await fetch("/api/pops/install", { method: "POST", headers: { accept: "application/json" } });
+      var body = await r.json();
+      install.disabled = false;
+      if (!r.ok) throw new Error(body.error || "download failed");
+      msg.textContent =
+        "Installed: " + (body.placed || []).join(", ") + " · " + (body.launchers || 0) + " launcher(s) made";
+      loadStatus();
+    } catch (err) {
+      install.disabled = false;
+      msg.textContent = "Failed: " + err.message;
+    }
+  });
 
   btn.addEventListener("click", async function () {
     if (!input.files || !input.files.length) {

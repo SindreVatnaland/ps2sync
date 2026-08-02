@@ -63,6 +63,30 @@ export function popsReady(): boolean {
   return existsSync(path.join(popsDir, 'POPSTARTER.ELF'));
 }
 
+// Public mirrors of the POPStarter core (Sony's PS1 emulator, mirrored by the
+// homebrew community — obtain/use for a console you own). All are plain files.
+const POPS_SOURCES: Array<{ name: string; url: string }> = [
+  { name: 'POPS.ELF', url: 'https://github.com/AnimMouse/POPS-binaries/raw/main/POPS.ELF' },
+  { name: 'IOPRP252.IMG', url: 'https://github.com/AnimMouse/POPS-binaries/raw/main/IOPRP252.IMG' },
+  { name: 'POPS.PAK', url: 'https://github.com/AnimMouse/POPS-binaries/raw/main/POPS.PAK' },
+  { name: 'POPS_IOX.PAK', url: 'https://github.com/AnimMouse/POPS-binaries/raw/main/POPS_IOX.PAK' },
+  { name: 'POPSTARTER.ELF', url: 'https://archive.org/download/pops-iox/POPSTARTER.ELF' },
+];
+
+// One-click PS1: fetch the whole POPStarter core into POPS/ and generate launchers.
+export async function installPops(): Promise<{ placed: string[]; launchers: number }> {
+  await fsp.mkdir(popsDir, { recursive: true });
+  const placed: string[] = [];
+  for (const s of POPS_SOURCES) {
+    const res = await fetch(s.url, { headers: { 'user-agent': 'ps2sync' } });
+    if (!res.ok) throw new Error(`download failed (${res.status}) for ${s.name}`);
+    await fsp.writeFile(path.join(popsDir, s.name), Buffer.from(await res.arrayBuffer()));
+    placed.push(s.name);
+  }
+  const launchers = await reconcilePs1Launchers();
+  return { placed, launchers };
+}
+
 // Which POPS support files are present, and how many PS1 games/launchers exist.
 export async function popsStatus(): Promise<{
   present: string[];
