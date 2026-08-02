@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { popsDir } from './paths.js';
+import { writeConfApps } from './apps.js';
 
 const execFileP = promisify(execFile);
 
@@ -132,5 +133,6 @@ export async function reconcilePs1Launchers(): Promise<number> {
     made++;
   }
   if (made) console.log(`reconcilePs1Launchers: created ${made} PS1 launcher ELF(s)`);
+  await writeConfApps(); // surface the PS1 launchers on OPL's Apps page (conf_apps.cfg)
   return made;
 }

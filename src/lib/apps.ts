@@ -8,7 +8,7 @@ import * as fsp from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { appsDir, DATA_DIR } from './paths.js';
+import { appsDir, DATA_DIR, popsDir } from './paths.js';
 
 const execFileP = promisify(execFile);
 
@@ -118,6 +118,17 @@ export async function writeConfApps(): Promise<void> {
   const lines = CATALOG.filter((a) => existsSync(path.join(appsDir, a.dest))).map(
     (a) => `${a.name}=smb0:/APPS/${a.dest}`,
   );
+  // PS1 over SMB is launched by listing the POPStarter ELFs (not by scanning VCDs).
+  // Each XX.<discid>.<title>.ELF in POPS/ becomes an app entry that boots its game.
+  const pops = await fsp.readdir(popsDir).catch(() => [] as string[]);
+  for (const n of pops.sort()) {
+    if (!n.startsWith('XX.') || !n.toUpperCase().endsWith('.ELF')) continue;
+    const title = n
+      .replace(/^XX\./, '')
+      .replace(/\.ELF$/i, '')
+      .replace(/^[A-Za-z]{4}_\d{3}\.\d{2}\./, ''); // drop the disc-id prefix for display
+    lines.push(`${title} (PS1)=smb0:/POPS/${n}`);
+  }
   const body = lines.length ? lines.join('\n') + '\n' : '';
   await fsp.writeFile(path.join(DATA_DIR, 'conf_apps.cfg'), body);
 }
