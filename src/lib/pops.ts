@@ -89,8 +89,9 @@ export async function pushPopsConfig(ps2ip: string): Promise<{ server: string; f
   if (!server) throw new Error("Set this server's LAN IP in the Setup guide first — it goes into SMBCONFIG.DAT");
 
   const gateway = ip.replace(/\.\d+$/, '.1');
-  // Format is read by POPStarter: "ip:port share" / user / password (blank = guest).
-  const smbCfg = `${server}:445 PS2\nGUEST\n`;
+  // POPStarter's format: SMBCONFIG.DAT is "<server IP> <share>" (login lines omitted
+  // for a guest share); IPCONFIG.DAT is "<PS2 IP> <netmask> <gateway>".
+  const smbCfg = `${server} PS2\n`;
   const ipCfg = `${ip} 255.255.255.0 ${gateway}`;
 
   const client = new Client(45000); // PS2Net's FTP is slow — be patient
