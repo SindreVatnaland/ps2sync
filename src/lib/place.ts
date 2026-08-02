@@ -12,6 +12,7 @@ import { games, type Game } from '../db/schema.js';
 import type { Console } from '../types.js';
 import { sanitizeTitle } from './sanitize.js';
 import { cookRawImage } from './identify.js';
+import { reconcilePs1Launchers } from './pops.js';
 import { DATA_DIR, dvdDir, cdDir, popsDir } from './paths.js';
 import { ensureCoverArt, removeCoverArt, oplId } from './art.js';
 
@@ -121,6 +122,7 @@ export async function placePs1(input: PlacePs1Input): Promise<Game> {
     .returning()
     .all();
   void ensureCoverArt(serial, title, 'ps1'); // fire-and-forget: art must never gate placement
+  void reconcilePs1Launchers(); // make this game's POPStarter launcher if the POPS core is present
   return rows[0];
 }
 

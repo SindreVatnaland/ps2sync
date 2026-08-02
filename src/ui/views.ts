@@ -216,6 +216,33 @@ export function appsView(): string {
   <div id="apps-list" class="muted">Loading…</div>
   <label class="apps-auto"><input type="checkbox" id="apps-auto"> Automatically install minor updates
     <span class="muted small">(checked every 12 h; major versions still ask)</span></label>
+</div>
+
+<div class="card">
+  <h2>PlayStation 1 (POPStarter)</h2>
+  <p class="muted">Your PS1 games are already converted to <code>.VCD</code> in <code>POPS/</code>. To boot them,
+    the PS2 also needs its <strong>PS1 emulator core + the POPStarter launcher</strong> in <code>POPS/</code>.
+    Those files are Sony-derived — they come from <em>your own console</em>, so ps2sync can't download them;
+    upload them once here and it does the rest (a per-game launcher so each title shows on OPL's
+    <strong>PS1 Games</strong> page over the network).</p>
+  <h3>1. Get the POPS files</h3>
+  <ul>
+    <li>Grab <code>POPS.binaries.7z</code> from <a href="https://github.com/AnimMouse/POPS-binaries" target="_blank" rel="noopener">AnimMouse/POPS-binaries</a>
+      — it contains <code>POPS.ELF</code>, <code>IOPRP252.IMG</code>, <code>POPS.PAK</code> and <code>POPS_IOX.PAK</code>.</li>
+    <li>You also need <code>POPSTARTER.ELF</code> (the launcher). It's commonly bundled with POPStarter releases
+      / the community <code>pops-iox</code> archive.</li>
+    <li>These are your console's PlayStation-1 emulator — obtain them from a PS2 you own.</li>
+  </ul>
+  <h3>2. Upload them to the server</h3>
+  <p class="muted small">Drop the individual files, or the whole <code>.7z</code> — ps2sync keeps only the
+    recognised POPS files and places them in <code>POPS/</code>.</p>
+  <input id="pops-file" type="file" multiple accept=".elf,.img,.pak,.7z,.zip">
+  <button class="btn" id="pops-upload">Upload POPS files</button>
+  <span id="pops-msg" class="small muted"></span>
+  <div id="pops-status" class="muted small" style="margin-top:.6rem">Loading…</div>
+  <h3>3. On the PS2</h3>
+  <p class="muted small">Run an <strong>OPL Daily Build</strong> (download it above), make sure SMB is enabled,
+    and open the <strong>PS1 Games</strong> page — your titles list and boot over ethernet.</p>
 </div>`;
 }
 

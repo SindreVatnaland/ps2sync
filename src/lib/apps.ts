@@ -26,12 +26,12 @@ export interface AppSpec {
 export const CATALOG: AppSpec[] = [
   {
     key: 'opl',
-    name: 'Open PS2 Loader',
+    name: 'Open PS2 Loader (Daily)',
     repo: 'ps2homebrew/Open-PS2-Loader',
-    asset: /^OPNPS2LD\.7z$/,
-    innerElf: /^OPNPS2LD.*\.ELF$/i, // archive holds OPNPS2LD-v<ver>.ELF; save as canonical name
+    tag: 'latest', // rolling daily build — fixes >2 GB DVDs AND has the PS1 Games page + share conf_apps
+    asset: /^OPNPS2LD\.ELF$/, // the daily tag ships a bare ELF (stable releases wrap it in a .7z)
     dest: 'OPNPS2LD.ELF',
-    blurb: 'Lists & boots your games over SMB. Update this to fix large (>2 GB) DVDs not showing.',
+    blurb: 'Lists & boots your games over SMB. The daily build fixes large (>2 GB) DVDs and enables PS1 (POPStarter) over the network.',
   },
   {
     key: 'ule',

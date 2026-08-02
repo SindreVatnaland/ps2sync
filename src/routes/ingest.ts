@@ -2,11 +2,14 @@
 // buffered); both create a job and hand off to the pipeline, then redirect home.
 import { createWriteStream } from 'node:fs';
 import * as fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance } from 'fastify';
 import { incomingJobDir } from '../lib/paths.js';
 import { acceptedExtension } from '../lib/ingest.js';
+import { canonicalPopsName, savePopsFile, extractPopsArchive, reconcilePs1Launchers } from '../lib/pops.js';
 import * as jobs from '../lib/jobs.js';
 import type { Console, Media } from '../types.js';
 
@@ -67,6 +70,40 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
     // Fire the pipeline in the background (identify -> dedupe -> [ps1 convert] -> place).
     void jobs.runJob(job.id, parseOverride(fields));
     return reply.redirect('/');
+  });
+
+  // POPS upload: the Sony PS1-emulator core + POPStarter launcher (POPS.ELF,
+  // IOPRP252.IMG, POPS.PAK, POPS_IOX.PAK, POPSTARTER.ELF), or a .7z/.zip holding
+  // them. Recognized files land in POPS/; then per-game launchers are generated.
+  app.post('/pops/upload', async (req, reply) => {
+    const placed: string[] = [];
+    const archives: string[] = [];
+    for await (const part of req.parts()) {
+      if (part.type !== 'file') continue;
+      const fn = path.basename(part.filename || '');
+      if (/\.(7z|zip|rar)$/i.test(fn)) {
+        const tmp = path.join(os.tmpdir(), `ps2sync-popsup-${randomUUID()}-${fn}`);
+        await pipeline(part.file, createWriteStream(tmp));
+        archives.push(tmp);
+      } else if (canonicalPopsName(fn)) {
+        const canon = await savePopsFile(fn, part.file);
+        if (canon) placed.push(canon);
+      } else {
+        part.file.resume(); // unknown file — must drain or the request hangs
+      }
+    }
+    for (const arc of archives) {
+      try {
+        placed.push(...(await extractPopsArchive(arc)));
+      } finally {
+        await fsp.rm(arc, { force: true });
+      }
+    }
+    if (placed.length === 0) {
+      return reply.code(400).send({ error: 'no POPS files found — expected POPS.ELF, IOPRP252.IMG, POPS_IOX.PAK, POPSTARTER.ELF (or a .7z of them)' });
+    }
+    const launchers = await reconcilePs1Launchers();
+    return { placed: [...new Set(placed)], launchers };
   });
 
   // URL add. formbody { url, console?, media?, target? }. createUrlJob inserts the

@@ -1052,6 +1052,62 @@ function wireApps() {
   load();
 }
 
+// PS1 / POPStarter setup (Apps page): upload the POPS core files + show status.
+function wirePops() {
+  var input = document.getElementById("pops-file");
+  if (!input) return; // not on the apps page
+  var btn = document.getElementById("pops-upload");
+  var msg = document.getElementById("pops-msg");
+  var status = document.getElementById("pops-status");
+
+  function loadStatus() {
+    getJSON("/api/pops")
+      .then(function (s) {
+        status.classList.remove("muted");
+        var have = s.present.length
+          ? "Present: " + s.present.map(esc).join(", ")
+          : "No POPS files uploaded yet";
+        var need = s.missing.length ? " · Missing: " + s.missing.map(esc).join(", ") : "";
+        var games =
+          " · " +
+          s.vcds +
+          " PS1 game(s), " +
+          s.launchers +
+          " launcher(s)" +
+          (s.ready ? "" : " — upload POPSTARTER.ELF to generate launchers");
+        status.innerHTML = "<strong>" + have + "</strong>" + esc(need) + esc(games);
+      })
+      .catch(function () {
+        status.textContent = "Could not load POPS status.";
+      });
+  }
+
+  btn.addEventListener("click", async function () {
+    if (!input.files || !input.files.length) {
+      msg.textContent = "Pick your POPS file(s) or a .7z first.";
+      return;
+    }
+    var fd = new FormData();
+    for (var i = 0; i < input.files.length; i++) fd.append("file", input.files[i]);
+    btn.disabled = true;
+    msg.textContent = "Uploading…";
+    try {
+      var r = await fetch("/pops/upload", { method: "POST", body: fd });
+      var body = await r.json();
+      btn.disabled = false;
+      if (!r.ok) throw new Error(body.error || "upload failed");
+      msg.textContent =
+        "Placed: " + (body.placed || []).join(", ") + " · " + (body.launchers || 0) + " launcher(s) made";
+      input.value = "";
+      loadStatus();
+    } catch (err) {
+      btn.disabled = false;
+      msg.textContent = "Failed: " + err.message;
+    }
+  });
+  loadStatus();
+}
+
 // Badge the Apps nav link when any installed app has an update (runs every page).
 function badgeAppUpdates() {
   var link = document.querySelector('a.navlink[href="/apps"]');
@@ -1077,6 +1133,7 @@ wireUpload();
 wireLibrary();
 wireSearch();
 wireApps();
+wirePops();
 badgeAppUpdates();
 wireGuideIp();
 hydrateCovers(); // fill covers for the server-rendered library rows

@@ -8,6 +8,7 @@ import * as jobs from '../lib/jobs.js';
 import { deleteGame } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp } from '../lib/apps.js';
+import { popsStatus } from '../lib/pops.js';
 import { getServerLanIp, setServerLanIp, isValidLanIp, getAppsAutoUpdate, setAppsAutoUpdate } from '../lib/settings.js';
 import { libraryTablesHtml } from '../ui/views.js';
 import type { Console } from '../types.js';
@@ -138,4 +139,7 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
     setAppsAutoUpdate(!!req.body?.enabled);
     return { appsAutoUpdate: getAppsAutoUpdate() };
   });
+
+  // PS1/POPStarter status: which POPS core files are present + game/launcher counts.
+  app.get('/api/pops', async () => popsStatus());
 }
