@@ -244,17 +244,22 @@ export function appsView(): string {
   </details>
   <h3>On the PS2</h3>
   <ol class="muted small">
-    <li>Run an <strong>OPL Daily Build</strong> and download <strong>POPStarter SMB Config</strong> (both above) —
-      they appear on OPL's <strong>Apps</strong> page.</li>
-    <li><strong>Run POPStarter SMB Config once</strong> (from the Apps page). POPStarter re-inits the network on
-      launch, so it needs its own settings — enter your <strong>SMB server + port</strong>, <strong>share</strong>
+    <li>Run an <strong>OPL Daily Build</strong> and download <strong>POPStarter SMB Config</strong> +
+      <strong>wLaunchELF</strong> (all above) — they appear on OPL's <strong>Apps</strong> page.</li>
+    <li><strong>Create the folder <code>mc0:/POPSTARTER</code> first.</strong> In wLaunchELF, browse to
+      <code>mc0:</code> → press <strong>R1</strong> → <strong>mkDir</strong> → name it exactly
+      <code>POPSTARTER</code>. The config tool can't create it and silently fails to save without it — this is the
+      easy step to miss.</li>
+    <li><strong>Run POPStarter SMB Config</strong> (from the Apps page). POPStarter re-inits the network on
+      launch, so it needs its own settings — pick memory card <strong>slot 1 (mc0)</strong>, enter your
+      <strong>SMB server + port</strong> (e.g. <code>192.168.1.10:445</code>), <strong>share</strong>
       <code>PS2</code>, user <code>GUEST</code>, blank password, and a <strong>static IP</strong> for the PS2
-      (address / <code>255.255.255.0</code> / your gateway). It saves to <code>mc0:/POPSTARTER/</code>.</li>
+      (address / <code>255.255.255.0</code> / your gateway). Save → it writes <code>mc0:/POPSTARTER/</code>.</li>
     <li>Launch a PS1 title from the <strong>Apps</strong> page — POPStarter reads that config and boots the
       <code>.VCD</code> over ethernet.</li>
   </ol>
-  <p class="muted small">Without step 2, launching a PS1 game just drops you back to the file manager — that's
-    POPStarter with no SMB config.</p>
+  <p class="muted small">If a PS1 game just drops you back to the file manager, it's POPStarter with no SMB
+    config — almost always the missing <code>mc0:/POPSTARTER</code> folder (step 2).</p>
 </div>`;
 }
 
