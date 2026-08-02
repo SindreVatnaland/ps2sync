@@ -242,24 +242,26 @@ export function appsView(): string {
     <input id="pops-file" type="file" multiple accept=".elf,.img,.pak,.7z,.zip">
     <button class="btn small" id="pops-upload">Upload POPS files</button>
   </details>
-  <h3>On the PS2</h3>
+  <h3>On the PS2 — set up POPStarter (over ethernet, no USB)</h3>
+  <p class="muted small">POPStarter needs an SMB config on the PS2's memory card. ps2sync can write it for you
+    over the network via wLaunchELF's FTP server — no memory-card typing, no config tool, no USB.</p>
   <ol class="muted small">
-    <li>Run an <strong>OPL Daily Build</strong> and download <strong>POPStarter SMB Config</strong> +
-      <strong>wLaunchELF</strong> (all above) — they appear on OPL's <strong>Apps</strong> page.</li>
-    <li><strong>Create the folder <code>mc0:/POPSTARTER</code> first.</strong> In wLaunchELF, browse to
-      <code>mc0:</code> → press <strong>R1</strong> → <strong>mkDir</strong> → name it exactly
-      <code>POPSTARTER</code>. The config tool can't create it and silently fails to save without it — this is the
-      easy step to miss.</li>
-    <li><strong>Run POPStarter SMB Config</strong> (from the Apps page). POPStarter re-inits the network on
-      launch, so it needs its own settings — pick memory card <strong>slot 1 (mc0)</strong>, enter your
-      <strong>SMB server + port</strong> (e.g. <code>192.168.1.10:445</code>), <strong>share</strong>
-      <code>PS2</code>, user <code>GUEST</code>, blank password, and a <strong>static IP</strong> for the PS2
-      (address / <code>255.255.255.0</code> / your gateway). Save → it writes <code>mc0:/POPSTARTER/</code>.</li>
-    <li>Launch a PS1 title from the <strong>Apps</strong> page — POPStarter reads that config and boots the
+    <li>Run an <strong>OPL Daily Build</strong> and <strong>wLaunchELF</strong> (download both above; launch
+      from OPL's Apps page).</li>
+    <li>In wLaunchELF: <strong>SELECT → Network Settings</strong> → set the PS2's IP (note it) → Save. Then
+      <strong>MISC → PS2Net</strong> to start its FTP server (an IP shows at the top of the screen).</li>
+    <li>Enter that PS2 IP below and click <strong>Push config to PS2</strong> — ps2sync FTPs
+      <code>SMBCONFIG.DAT</code> + <code>IPCONFIG.DAT</code> into <code>mc0:/POPSTARTER/</code> for you.</li>
+    <li>Back in OPL's <strong>Apps</strong> page, launch a PS1 title — POPStarter reads the config and boots the
       <code>.VCD</code> over ethernet.</li>
   </ol>
-  <p class="muted small">If a PS1 game just drops you back to the file manager, it's POPStarter with no SMB
-    config — almost always the missing <code>mc0:/POPSTARTER</code> folder (step 2).</p>
+  <p><label for="ps2-ip" class="small">PS2 IP (from the PS2Net screen)</label>
+    <input id="ps2-ip" type="text" placeholder="192.168.68.74" autocomplete="off" style="max-width:200px">
+    <button class="btn" id="pops-push">Push config to PS2</button>
+    <span id="pops-push-msg" class="small muted"></span></p>
+  <p class="muted small">Needs <strong>this server's LAN IP</strong> set (Setup guide) — it goes into the config
+    as your SMB server. If a PS1 game drops you back to the file manager, the config didn't land — re-check the
+    PS2 IP and that PS2Net is running.</p>
 </div>`;
 }
 

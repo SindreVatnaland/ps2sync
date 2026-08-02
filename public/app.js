@@ -1105,6 +1105,30 @@ function wirePops() {
       });
   }
 
+  var push = document.getElementById("pops-push");
+  if (push) {
+    var pushMsg = document.getElementById("pops-push-msg");
+    var ipInput = document.getElementById("ps2-ip");
+    push.addEventListener("click", async function () {
+      push.disabled = true;
+      pushMsg.textContent = "Connecting to PS2 over FTP…";
+      try {
+        var r = await fetch("/api/pops/push-config", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify({ ps2ip: (ipInput.value || "").trim() }),
+        });
+        var body = await r.json();
+        push.disabled = false;
+        if (!r.ok) throw new Error(body.error || "push failed");
+        pushMsg.textContent = "Wrote " + (body.files || []).join(" + ") + " to mc0:/POPSTARTER/ (SMB server " + body.server + ")";
+      } catch (err) {
+        push.disabled = false;
+        pushMsg.textContent = "Failed: " + err.message;
+      }
+    });
+  }
+
   var purge = document.getElementById("pops-purge");
   if (purge) {
     purge.addEventListener("click", async function () {

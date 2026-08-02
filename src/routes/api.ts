@@ -8,7 +8,7 @@ import * as jobs from '../lib/jobs.js';
 import { deleteGame, purgeSmallPs1 } from '../lib/place.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp, CATALOG } from '../lib/apps.js';
-import { popsStatus, installPops } from '../lib/pops.js';
+import { popsStatus, installPops, pushPopsConfig } from '../lib/pops.js';
 import { getServerLanIp, setServerLanIp, isValidLanIp, getAppsAutoUpdate, setAppsAutoUpdate } from '../lib/settings.js';
 import { libraryTablesHtml } from '../ui/views.js';
 import type { Console } from '../types.js';
@@ -146,6 +146,15 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   // Clean up bogus tiny PS1 "games" (< 50 MB) — e.g. .bin assets from an
   // extracted-game archive that got ingested one-per-file.
   app.post('/api/pops/purge', async () => ({ removed: await purgeSmallPs1(50 * 1024 * 1024) }));
+
+  // Push POPStarter's SMB config onto the PS2's memory card over FTP (PS2Net).
+  app.post<{ Body: { ps2ip?: string } }>('/api/pops/push-config', async (req, reply) => {
+    try {
+      return await pushPopsConfig(req.body?.ps2ip ?? '');
+    } catch (err) {
+      return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
 
   // One-click: fetch the whole POPStarter core into POPS/ and generate launchers.
   app.post('/api/pops/install', async (_req, reply) => {

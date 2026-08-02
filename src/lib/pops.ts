@@ -10,8 +10,11 @@ import { existsSync, createWriteStream } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
+import { Client } from 'basic-ftp';
 import { popsDir } from './paths.js';
 import { writeConfApps } from './apps.js';
+import { getServerLanIp } from './settings.js';
 
 const execFileP = promisify(execFile);
 
@@ -73,6 +76,36 @@ const POPS_SOURCES: Array<{ name: string; url: string }> = [
   { name: 'POPS_IOX.PAK', url: 'https://github.com/AnimMouse/POPS-binaries/raw/main/POPS_IOX.PAK' },
   { name: 'POPSTARTER.ELF', url: 'https://archive.org/download/pops-iox/POPSTARTER.ELF' },
 ];
+
+// Push POPStarter's SMB config onto the PS2's memory card over ethernet, via
+// wLaunchELF's built-in FTP server (PS2Net). `ps2ip` is the PS2's current IP (shown
+// on the PS2Net screen); we also use it as POPStarter's static IP so it matches.
+// Creates mc0:/POPSTARTER/ and writes SMBCONFIG.DAT + IPCONFIG.DAT — no USB, no
+// on-console typing. Requires PS2Net running and this server's LAN IP set.
+export async function pushPopsConfig(ps2ip: string): Promise<{ server: string; files: string[] }> {
+  const ip = ps2ip.trim();
+  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) throw new Error('Enter the PS2 IP shown on the PS2Net screen, e.g. 192.168.68.74');
+  const server = getServerLanIp();
+  if (!server) throw new Error("Set this server's LAN IP in the Setup guide first — it goes into SMBCONFIG.DAT");
+
+  const gateway = ip.replace(/\.\d+$/, '.1');
+  // Format is read by POPStarter: "ip:port share" / user / password (blank = guest).
+  const smbCfg = `${server}:445 PS2\nGUEST\n`;
+  const ipCfg = `${ip} 255.255.255.0 ${gateway}`;
+
+  const client = new Client(15000);
+  try {
+    await client.access({ host: ip, port: 21, secure: false });
+    await client.ensureDir('mc0:/POPSTARTER'); // creates the folder and cwd's into it
+    await client.uploadFrom(Readable.from([Buffer.from(smbCfg)]), 'SMBCONFIG.DAT');
+    await client.uploadFrom(Readable.from([Buffer.from(ipCfg)]), 'IPCONFIG.DAT');
+  } catch (err) {
+    throw new Error(`FTP to PS2 (${ip}) failed: ${err instanceof Error ? err.message : String(err)}. Is PS2Net running (wLaunchELF -> MISC -> PS2Net) at that IP?`);
+  } finally {
+    client.close();
+  }
+  return { server, files: ['SMBCONFIG.DAT', 'IPCONFIG.DAT'] };
+}
 
 // One-click PS1: fetch the whole POPStarter core into POPS/ and generate launchers.
 export async function installPops(): Promise<{ placed: string[]; launchers: number }> {
