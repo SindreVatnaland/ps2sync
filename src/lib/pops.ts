@@ -137,7 +137,7 @@ export async function popsStatus(): Promise<{
     missing: POPS_FILES.filter((f) => !upper.has(f)),
     ready: upper.has('POPSTARTER.ELF'),
     vcds: names.filter((n) => n.toLowerCase().endsWith('.vcd')).length,
-    launchers: names.filter((n) => n.startsWith('XX.') && n.toUpperCase().endsWith('.ELF')).length,
+    launchers: names.filter((n) => n.startsWith('SB.') && n.toUpperCase().endsWith('.ELF')).length,
   };
 }
 
@@ -150,11 +150,14 @@ export async function reconcilePs1Launchers(): Promise<number> {
   if (!existsSync(starter)) return 0;
   const names = await fsp.readdir(popsDir).catch(() => [] as string[]);
   const vcds = names.filter((n) => n.toLowerCase().endsWith('.vcd'));
-  const wanted = new Set(vcds.map((n) => `XX.${n.slice(0, -4)}.ELF`));
+  // POPStarter reads its own filename prefix to choose the device: SB.=SMB (smb0:),
+  // XX.=USB (mass:), no prefix=HDD. Our games stream over SMB, so launchers MUST be
+  // SB.<name>.ELF — an XX. launcher tells POPStarter to load the VCD from USB and fails.
+  const wanted = new Set(vcds.map((n) => `SB.${n.slice(0, -4)}.ELF`));
 
-  // prune orphaned launchers
+  // prune orphaned launchers, including stale XX. (USB-mode) ones from before this fix
   for (const n of names) {
-    if (n.startsWith('XX.') && n.toUpperCase().endsWith('.ELF') && !wanted.has(n)) {
+    if ((n.startsWith('SB.') || n.startsWith('XX.')) && n.toUpperCase().endsWith('.ELF') && !wanted.has(n)) {
       await fsp.rm(path.join(popsDir, n), { force: true }).catch(() => {});
     }
   }
