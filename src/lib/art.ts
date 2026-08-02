@@ -77,7 +77,21 @@ async function findBoxart(title: string, serial: string, console: Console): Prom
   }
   const want = normTitle(title);
   if (!want) return null;
-  const matches = names.filter((n) => normTitle(n) === want);
+  let matches = names.filter((n) => normTitle(n) === want);
+  if (!matches.length) {
+    // No exact hit — regional titles often add/drop a subtitle (US "Going Commando"
+    // vs EU "Locked and Loaded" vs libretro's bare "Ratchet _ Clank 2"). Fall back to
+    // a libretro base title our longer title starts with, taking the most specific
+    // (longest) one so "…2" wins over "…" for "Ratchet & Clank 2 - …".
+    const based = names.filter((n) => {
+      const nn = normTitle(n);
+      return nn.length >= 6 && want.startsWith(nn + ' ');
+    });
+    if (based.length) {
+      const maxLen = Math.max(...based.map((n) => normTitle(n).length));
+      matches = based.filter((n) => normTitle(n).length === maxLen);
+    }
+  }
   if (!matches.length) return null;
   const rl = regionOf(serial).toLowerCase();
   // prefer our region, then USA, then whatever came first
