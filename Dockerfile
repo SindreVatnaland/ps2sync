@@ -49,7 +49,7 @@ RUN npm prune --omit=dev
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
 RUN apt-get update \
- && apt-get install -y --no-install-recommends p7zip-full mame-tools ca-certificates \
+ && apt-get install -y --no-install-recommends p7zip-full mame-tools graphicsmagick ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 # cue2pops binary from stage 1 (PS1 .bin/.cue -> POPStarter .VCD).

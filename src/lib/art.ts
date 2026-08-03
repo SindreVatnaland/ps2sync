@@ -5,7 +5,8 @@
 // use "_" for "&" (e.g. "Ratchet _ Clank (Europe) (En,Fr,De,Es,It) (v1.00)"), which
 // we can't guess — so we fetch the system's boxart index once and match our title
 // against the real names. The whole thing is optional and never throws.
-import { writeFile, mkdir, rm, access } from 'node:fs/promises';
+import { writeFile, readFile, readdir, mkdir, rm, access } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { artDir } from './paths.js';
@@ -14,6 +15,45 @@ import type { Console } from '../types.js';
 const TIMEOUT_MS = 12_000;
 
 const exists = (p: string): Promise<boolean> => access(p).then(() => true).catch(() => false);
+
+// OPL's minimal PNG decoder shows a generic cover for libretro's full-size art:
+// it ships ~512px PNGs carrying ICC/gamma profile chunks OPL can't parse. Re-encode
+// each cover through GraphicsMagick — `-strip` drops the profiles, `-resize` shrinks
+// to an OPL-friendly width. Falls back to the original buffer if gm is missing or
+// fails, so a cover is never lost to a resize error.
+const COVER_WIDTH = 256;
+function resizeCover(buf: Buffer): Promise<Buffer> {
+  return new Promise((resolve) => {
+    const gm = spawn('gm', ['convert', 'png:-', '-strip', '-resize', `${COVER_WIDTH}x`, 'png:-']);
+    const out: Buffer[] = [];
+    gm.stdout.on('data', (d: Buffer) => out.push(d));
+    gm.on('error', () => resolve(buf)); // gm not installed -> keep original
+    gm.on('close', (code) => resolve(code === 0 && out.length ? Buffer.concat(out) : buf));
+    gm.stdin.on('error', () => {}); // ignore EPIPE if gm dies before we finish writing
+    gm.stdin.end(buf);
+  });
+}
+
+// Re-process every cover already in ART/ through resizeCover (strip + shrink) — for
+// fixing full-size covers written before resizing existed. Returns how many changed.
+export async function resizeExistingCovers(): Promise<number> {
+  let n = 0;
+  for (const f of await readdir(artDir).catch(() => [] as string[])) {
+    if (!f.endsWith('_COV.png')) continue;
+    const p = path.join(artDir, f);
+    try {
+      const buf = await readFile(p);
+      const small = await resizeCover(buf);
+      if (small.length !== buf.length) {
+        await writeFile(p, small);
+        n++;
+      }
+    } catch {
+      /* skip unreadable */
+    }
+  }
+  return n;
+}
 
 // Disc serial (SLUS-20102) -> OPL boot id (SLUS_201.02) — how OPL names its art
 // files. Standard ids are 4 letters + 5 digits split 3.2; anything else falls back
@@ -111,7 +151,7 @@ export async function ensureCoverArt(serial: string, title: string, console: Con
     if (!res.ok) return;
     const buf = Buffer.from(await res.arrayBuffer());
     await mkdir(artDir, { recursive: true });
-    await writeFile(dest, buf);
+    await writeFile(dest, await resizeCover(buf));
   } catch {
     /* art is optional */
   }

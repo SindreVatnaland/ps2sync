@@ -14,7 +14,7 @@ import { sanitizeTitle } from './sanitize.js';
 import { cookRawImage } from './identify.js';
 import { reconcilePs1Launchers } from './pops.js';
 import { DATA_DIR, dvdDir, cdDir, popsDir, artDir } from './paths.js';
-import { ensureCoverArt, removeCoverArt, oplId } from './art.js';
+import { ensureCoverArt, removeCoverArt, resizeExistingCovers, oplId } from './art.js';
 
 export interface PlacePs2Input {
   serial: string;
@@ -128,7 +128,7 @@ export async function placePs1(input: PlacePs1Input): Promise<Game> {
 
 // Re-fetch box art for every game missing a cover (ensureCoverArt skips ones that
 // already have art). Returns how many new covers were added.
-export async function refreshCoverArt(): Promise<{ added: number; total: number }> {
+export async function refreshCoverArt(): Promise<{ added: number; resized: number; total: number }> {
   const rows = db.select().from(games).all();
   let added = 0;
   for (const g of rows) {
@@ -137,7 +137,9 @@ export async function refreshCoverArt(): Promise<{ added: number; total: number 
     await ensureCoverArt(g.serial, g.title, g.console);
     if (!had && existsSync(dest)) added++;
   }
-  return { added, total: rows.length };
+  // shrink/strip any full-size covers already on the share (OPL rejects big PNGs)
+  const resized = await resizeExistingCovers();
+  return { added, resized, total: rows.length };
 }
 
 // Remove a game's file and its row. rm -f is idempotent — safe if the file is already gone.
