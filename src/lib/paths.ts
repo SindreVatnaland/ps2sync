@@ -1,6 +1,6 @@
 // Absolute paths derived from DATA_DIR. The DVD/ CD/ POPS/ dirs are what the
 // sibling Samba container shares so the PS2 (OPL/POPStarter) can pull games.
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, chmodSync } from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
 
@@ -18,6 +18,16 @@ export const dbDir = path.join(DATA_DIR, 'db'); // sqlite lives here
 export function ensureDirs(): void {
   for (const d of [dvdDir, cdDir, popsDir, artDir, appsDir, incomingDir, dbDir]) {
     mkdirSync(d, { recursive: true });
+  }
+  // POPStarter (running over SMB as the samba guest = nobody) must be able to CREATE
+  // its VMC (virtual PS1 memory card) in POPS/ or PS1 saves fail with "no memory card".
+  // The share is otherwise guest-read-only, so make POPS/ world-writable.
+  // ponytail: 0777 on POPS only. Ceiling: any LAN client can write there — fine for a
+  // trusted homelab behind Tailscale. Upgrade path: samba `force user` if that changes.
+  try {
+    chmodSync(popsDir, 0o777);
+  } catch {
+    /* best-effort — non-fatal if the fs rejects it */
   }
 }
 
