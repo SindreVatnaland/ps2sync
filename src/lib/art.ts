@@ -16,15 +16,16 @@ const TIMEOUT_MS = 12_000;
 
 const exists = (p: string): Promise<boolean> => access(p).then(() => true).catch(() => false);
 
-// OPL's minimal PNG decoder shows a generic cover for libretro's full-size art:
-// it ships ~512px PNGs carrying ICC/gamma profile chunks OPL can't parse. Re-encode
-// each cover through GraphicsMagick — `-strip` drops the profiles, `-resize` shrinks
-// to an OPL-friendly width. Falls back to the original buffer if gm is missing or
+// OPL shows a generic tile for libretro's full-size art. Comparing covers that
+// render on the PS2 vs ones that don't: the good ones are ~486px-wide RGBA, the bad
+// ones 512px-wide RGB. So normalise every cover to that known-good shape via
+// GraphicsMagick — shrink to COVER_WIDTH and force a 32-bit RGBA output
+// (-type TrueColorMatte). Falls back to the original buffer if gm is missing or
 // fails, so a cover is never lost to a resize error.
 const COVER_WIDTH = 256;
 function resizeCover(buf: Buffer): Promise<Buffer> {
   return new Promise((resolve) => {
-    const gm = spawn('gm', ['convert', 'png:-', '-strip', '-resize', `${COVER_WIDTH}x`, 'png:-']);
+    const gm = spawn('gm', ['convert', 'png:-', '-resize', `${COVER_WIDTH}x`, '-strip', '-type', 'TrueColorMatte', 'png:-']);
     const out: Buffer[] = [];
     gm.stdout.on('data', (d: Buffer) => out.push(d));
     gm.on('error', () => resolve(buf)); // gm not installed -> keep original
