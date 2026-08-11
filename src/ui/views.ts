@@ -41,6 +41,11 @@ function libraryTable(consoleLabel: string, rows: Game[]): string {
       const title = escapeHtml(g.title || g.serial);
       const id = escapeHtml(g.id);
       const del = `<button class="btn small danger" data-action="delete" data-id="${id}" data-title="${title}">Delete</button>`;
+      // PS1 only: upload a POPStarter per-game fix (CHEATS.TXT / PATCH_#.BIN) into its folder.
+      const patch =
+        g.console === 'ps1'
+          ? `<button class="btn small" data-action="patch" data-id="${id}" data-title="${title}">Patch</button>`
+          : '';
       const search = escapeHtml(`${g.title} ${g.serial}`.toLowerCase());
       return `<tr data-row data-search="${search}">
   <td><img class="cover-sm" data-cover data-console="${escapeHtml(g.console)}" data-serial="${escapeHtml(g.serial)}" data-title="${escapeHtml(g.title)}" alt="">${title}</td>
@@ -48,7 +53,7 @@ function libraryTable(consoleLabel: string, rows: Game[]): string {
   <td>${escapeHtml(fmtMedia(g))}</td>
   <td data-value="${g.sizeBytes}">${fmtBytes(g.sizeBytes)}</td>
   <td data-value="${g.createdAt}">${escapeHtml(fmtDate(g.createdAt))}</td>
-  <td><div class="row-actions">${del}</div></td>
+  <td><div class="row-actions">${patch}${del}</div></td>
 </tr>`;
     })
     .join('\n');

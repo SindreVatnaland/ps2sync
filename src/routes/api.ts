@@ -1,6 +1,11 @@
 // JSON API. Feeds the polling UI and handles per-game/job actions.
+import { createWriteStream } from 'node:fs';
+import * as fsp from 'node:fs/promises';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance } from 'fastify';
 import { asc, desc, eq } from 'drizzle-orm';
+import { DATA_DIR } from '../lib/paths.js';
 import { db } from '../db/index.js';
 import { games, jobs as jobsTable } from '../db/schema.js';
 import * as gamedb from '../lib/gamedb.js';
@@ -50,6 +55,32 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
   // Full library.
   app.get('/api/games', async () => {
     return db.select().from(games).orderBy(asc(games.console), asc(games.title)).all();
+  });
+
+  // Upload a POPStarter per-game fix (CHEATS.TXT / PATCH_#.BIN / TROJAN_#.BIN) into the
+  // game's own folder on the share, where POPStarter reads it on next launch. PS1 only.
+  // Names are forced ALL-CAPS (POPStarter requires it) and the folder is 0777 so both
+  // POPStarter (samba guest) and this write coexist.
+  app.post<{ Params: { id: string } }>('/api/games/:id/patch', async (req, reply) => {
+    const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
+    if (!game) return reply.code(404).send({ error: 'no such game' });
+    if (game.console !== 'ps1') return reply.code(400).send({ error: 'patches are PS1-only (POPStarter)' });
+    const folder = path.join(DATA_DIR, game.stagedPath.replace(/\.vcd$/i, '')); // POPStarter names it after the VCD, sans ext
+    await fsp.mkdir(folder, { recursive: true });
+    await fsp.chmod(folder, 0o777).catch(() => {});
+    const saved: string[] = [];
+    for await (const part of req.parts()) {
+      if (part.type !== 'file') continue;
+      const name = path.basename(part.filename || '').toUpperCase();
+      if (!name) {
+        part.file.resume();
+        continue;
+      }
+      await pipeline(part.file, createWriteStream(path.join(folder, name)));
+      saved.push(name);
+    }
+    if (saved.length === 0) return reply.code(400).send({ error: 'no file uploaded' });
+    return { game: game.title, folder: path.basename(folder), saved };
   });
 
   // Rendered library tables (HTML fragment) — the UI swaps this in when a job

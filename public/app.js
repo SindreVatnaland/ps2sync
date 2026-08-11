@@ -802,6 +802,48 @@ document.addEventListener("click", async function (e) {
     return;
   }
 
+  if (action === "patch") {
+    // Pick a patch file (CHEATS.TXT / PATCH_#.BIN / TROJAN_#.BIN) and drop it into the
+    // game's POPS folder over the API. POPStarter reads it on next launch.
+    var inp = document.getElementById("patch-file");
+    if (!inp) {
+      inp = document.createElement("input");
+      inp.type = "file";
+      inp.id = "patch-file";
+      inp.multiple = true;
+      inp.style.display = "none";
+      document.body.appendChild(inp);
+    }
+    inp.value = "";
+    inp.onchange = async function () {
+      if (!inp.files || !inp.files.length) return;
+      var fd = new FormData();
+      for (var i = 0; i < inp.files.length; i++) fd.append("file", inp.files[i]);
+      btn.disabled = true;
+      try {
+        var res = await fetch("/api/games/" + id + "/patch", {
+          method: "POST",
+          body: fd,
+        });
+        var j = await res.json();
+        if (!res.ok) throw new Error(j.error || res.status);
+        alert(
+          'Patch uploaded to "' +
+            name +
+            '": ' +
+            (j.saved || []).join(", ") +
+            "\nLaunch the game to apply.",
+        );
+      } catch (err) {
+        alert("Patch upload failed: " + err);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    inp.click();
+    return;
+  }
+
   if (action !== "delete") return;
   if (
     !confirm(
