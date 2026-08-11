@@ -162,6 +162,17 @@ export async function reconcilePs1Launchers(): Promise<number> {
     }
   }
 
+  // Pre-create each game's per-title folder (POPStarter names it after the VCD, sans
+  // extension) as 0777 so BOTH sides can write into it: POPStarter drops its SLOT?.VMC
+  // there as the samba guest, and ps2sync drops per-game patch files (CHEATS.TXT /
+  // PATCH_#.BIN / TROJAN_#.BIN) there as node. Whoever creates it first with tight perms
+  // would lock the other out. chmod is best-effort (no-op if POPStarter already made it).
+  for (const n of vcds) {
+    const dir = path.join(popsDir, n.slice(0, -4));
+    await fsp.mkdir(dir, { recursive: true }).catch(() => {});
+    await fsp.chmod(dir, 0o777).catch(() => {});
+  }
+
   let made = 0;
   for (const stubName of wanted) {
     const stub = path.join(popsDir, stubName);
