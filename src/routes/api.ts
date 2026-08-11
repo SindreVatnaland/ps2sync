@@ -11,6 +11,8 @@ import { games, jobs as jobsTable } from '../db/schema.js';
 import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
 import { deleteGame, purgeSmallPs1, refreshCoverArt } from '../lib/place.js';
+import { setOverclock, applyGameFix, gameFixLabel, isValidFixFile, OC_LEVELS } from '../lib/fixes.js';
+import { oplId } from '../lib/art.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp, CATALOG } from '../lib/apps.js';
 import { popsStatus, installPops, pushPopsConfig } from '../lib/pops.js';
@@ -69,6 +71,7 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
     await fsp.mkdir(folder, { recursive: true });
     await fsp.chmod(folder, 0o777).catch(() => {});
     const saved: string[] = [];
+    const rejected: string[] = [];
     for await (const part of req.parts()) {
       if (part.type !== 'file') continue;
       const name = path.basename(part.filename || '').toUpperCase();
@@ -76,11 +79,47 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
         part.file.resume();
         continue;
       }
+      if (!isValidFixFile(name)) {
+        rejected.push(name); // only real POPStarter fix files allowed
+        part.file.resume();
+        continue;
+      }
       await pipeline(part.file, createWriteStream(path.join(folder, name)));
       saved.push(name);
     }
-    if (saved.length === 0) return reply.code(400).send({ error: 'no file uploaded' });
-    return { game: game.title, folder: path.basename(folder), saved };
+    if (saved.length === 0) {
+      return reply.code(400).send({
+        error: rejected.length
+          ? `Not POPStarter fix files: ${rejected.join(', ')}. Allowed: CHEATS.TXT, PATCH_#.BIN, TROJAN_#.BIN, VMCDIR.TXT, DISCS.TXT`
+          : 'no file uploaded',
+      });
+    }
+    return { game: game.title, folder: path.basename(folder), saved, rejected };
+  });
+
+  // Set/clear a PS1 game's CPU overclock (level 0 = off; otherwise a value in OC_LEVELS).
+  // Writes/removes TROJAN_2.BIN in the game's folder — smooths PS1 stutter/slowdown.
+  app.post<{ Params: { id: string }; Body: { level?: number } }>('/api/games/:id/overclock', async (req, reply) => {
+    const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
+    if (!game) return reply.code(404).send({ error: 'no such game' });
+    if (game.console !== 'ps1') return reply.code(400).send({ error: 'overclock is PS1-only (POPStarter)' });
+    const level = Number(req.body?.level ?? 0);
+    if (level !== 0 && !(OC_LEVELS as readonly number[]).includes(level)) {
+      return reply.code(400).send({ error: `unknown overclock level: ${level}` });
+    }
+    await setOverclock(game.stagedPath, level);
+    return { game: game.title, level };
+  });
+
+  // Apply the curated bundled fix for a PS1 game (if one exists for its boot id).
+  app.post<{ Params: { id: string } }>('/api/games/:id/fix', async (req, reply) => {
+    const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
+    if (!game) return reply.code(404).send({ error: 'no such game' });
+    if (game.console !== 'ps1') return reply.code(400).send({ error: 'fixes are PS1-only (POPStarter)' });
+    const id = oplId(game.serial);
+    if (!gameFixLabel(id)) return reply.code(404).send({ error: `no bundled fix for ${game.title}` });
+    const saved = await applyGameFix(game.stagedPath, id);
+    return { game: game.title, saved };
   });
 
   // Rendered library tables (HTML fragment) — the UI swaps this in when a job

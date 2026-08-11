@@ -844,6 +844,34 @@ document.addEventListener("click", async function (e) {
     return;
   }
 
+  if (action === "fix") {
+    if (
+      !confirm(
+        'Apply the bundled fix to "' +
+          name +
+          '"? Drops POPStarter fix files into the game folder. Relaunch the game to apply.',
+      )
+    )
+      return;
+    btn.disabled = true;
+    try {
+      var fres = await fetch("/api/games/" + id + "/fix", {
+        method: "POST",
+        headers: { accept: "application/json" },
+      });
+      var fj = await fres.json();
+      if (!fres.ok) throw new Error(fj.error || fres.status);
+      alert(
+        'Applied fix to "' + name + '": ' + (fj.saved || []).join(", ") + "\nRelaunch the game.",
+      );
+    } catch (err) {
+      alert("Apply fix failed: " + err);
+    } finally {
+      btn.disabled = false;
+    }
+    return;
+  }
+
   if (action !== "delete") return;
   if (
     !confirm(
@@ -863,6 +891,28 @@ document.addEventListener("click", async function (e) {
   } catch (err) {
     btn.disabled = false;
     alert("Delete failed: " + err);
+  }
+});
+
+// PS1 overclock dropdown: writes/removes the game's TROJAN_2.BIN via the API.
+document.addEventListener("change", async function (e) {
+  var sel = e.target;
+  if (!sel || !sel.dataset || sel.dataset.action !== "overclock") return;
+  var id = sel.dataset.id;
+  var level = parseInt(sel.value, 10) || 0;
+  sel.disabled = true;
+  try {
+    var res = await fetch("/api/games/" + id + "/overclock", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ level: level }),
+    });
+    var j = await res.json();
+    if (!res.ok) throw new Error(j.error || res.status);
+  } catch (err) {
+    alert("Overclock change failed: " + err);
+  } finally {
+    sel.disabled = false;
   }
 });
 
