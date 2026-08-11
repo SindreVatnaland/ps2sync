@@ -139,6 +139,8 @@ export async function refreshCoverArt(): Promise<{ added: number; resized: numbe
   }
   // shrink/strip any full-size covers already on the share (OPL rejects big PNGs)
   const resized = await resizeExistingCovers();
+  // clone each PS1 cover to its "<ELF filename>_COV.png" name so POPStarter apps show art
+  await reconcilePs1Launchers();
   return { added, resized, total: rows.length };
 }
 

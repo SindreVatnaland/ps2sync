@@ -12,7 +12,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { Client } from 'basic-ftp';
-import { popsDir } from './paths.js';
+import { popsDir, artDir } from './paths.js';
 import { writeConfApps } from './apps.js';
 import { getServerLanIp } from './settings.js';
 
@@ -181,6 +181,27 @@ export async function reconcilePs1Launchers(): Promise<number> {
     made++;
   }
   if (made) console.log(`reconcilePs1Launchers: created ${made} PS1 launcher ELF(s)`);
+
+  // Cover art for POPStarter apps: OPL looks for "<full ELF filename>_COV.png" in ART/
+  // (not the PS2 "<gameid>_COV.png" convention). Mirror each game's cover to that name
+  // so PS1 games show box art too, and prune copies whose launcher is gone. The source
+  // <gameid>_COV.png is written+resized by art.ts; here we just clone it under the ELF name.
+  const artFiles = await fsp.readdir(artDir).catch(() => [] as string[]);
+  const wantedArt = new Set<string>();
+  for (const elf of wanted) {
+    const m = /^SB\.([A-Za-z]{4}_\d{3}\.\d{2})\./.exec(elf); // pull the gameid back out
+    if (!m) continue;
+    const src = path.join(artDir, `${m[1]}_COV.png`);
+    const dstName = `${elf}_COV.png`;
+    wantedArt.add(dstName);
+    if (existsSync(src)) await fsp.copyFile(src, path.join(artDir, dstName)).catch(() => {});
+  }
+  for (const f of artFiles) {
+    if (/^SB\..*\.ELF_COV\.png$/.test(f) && !wantedArt.has(f)) {
+      await fsp.rm(path.join(artDir, f), { force: true }).catch(() => {});
+    }
+  }
+
   await writeConfApps(); // surface the PS1 launchers on OPL's Apps page (conf_apps.cfg)
   return made;
 }
