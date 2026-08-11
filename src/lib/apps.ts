@@ -35,12 +35,15 @@ export const CATALOG: AppSpec[] = [
   },
   {
     key: 'ule',
-    name: 'wLaunchELF',
-    repo: 'ps2homebrew/wLaunchELF',
-    tag: 'latest', // rolling prerelease that ships a bare BOOT.ELF
+    name: 'wLaunchELF ISR',
+    repo: 'israpps/wLaunchELF_ISR',
+    // rolling build (currently v4.43x_isr). Plain BOOT.ELF = full build with a working
+    // FTP server; the NO_NETWORK/EXFAT/DS34/MMCE asset variants either drop networking
+    // (no FTP) or add pad/storage extras we don't need.
+    tag: 'latest',
     asset: /^BOOT\.ELF$/,
     dest: 'wLaunchELF.ELF',
-    blurb: 'PS2 file manager — copy new ELFs from the share to your memory card over ethernet.',
+    blurb: 'PS2 file manager (Israpps fork) — working FTP server + copy ELFs/configs from the share to your memory card over ethernet.',
   },
   {
     key: 'popscfg',
