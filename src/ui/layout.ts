@@ -132,6 +132,14 @@ code{background:var(--panel2);padding:.1rem .35rem;border-radius:4px;font-size:.
 .pill{display:inline-block;font-size:.72rem;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:.05rem .45rem;margin:.1rem .1rem 0}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:.45rem}
 @keyframes spin{to{transform:rotate(360deg)}}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.2rem;max-width:460px;width:100%;max-height:85vh;overflow:auto}
+.modal h3{margin:.1rem 0 .8rem}
+.modal h4{margin:.9rem 0 .2rem;font-size:.82rem;font-weight:600}
+.mrow{display:flex;align-items:center;justify-content:space-between;gap:.7rem;padding:.5rem 0;border-top:1px solid var(--border)}
+.mrow:first-of-type{border-top:none}
+.mrow select,.mrow input[type=file]{width:auto}
+.mclose{margin-top:1rem;text-align:right}
 `;
 
 // Inline SVG brand mark (PlayStation face-button symbols) — reused as the favicon

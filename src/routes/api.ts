@@ -11,7 +11,7 @@ import { games, jobs as jobsTable } from '../db/schema.js';
 import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
 import { deleteGame, purgeSmallPs1, refreshCoverArt } from '../lib/place.js';
-import { setOverclock, applyGameFix, gameFixLabel, isValidFixFile, OC_LEVELS } from '../lib/fixes.js';
+import { setOverclock, getOverclock, applyGameFix, gameFixLabel, isValidFixFile, OC_LEVELS } from '../lib/fixes.js';
 import { oplId } from '../lib/art.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp, CATALOG } from '../lib/apps.js';
@@ -109,6 +109,34 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
     }
     await setOverclock(game.stagedPath, level);
     return { game: game.title, level };
+  });
+
+  // State for the per-game Tweaks modal: current overclock, whether a bundled fix
+  // exists, and which fix files are currently in the game's folder.
+  app.get<{ Params: { id: string } }>('/api/games/:id/fixes', async (req, reply) => {
+    const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
+    if (!game) return reply.code(404).send({ error: 'no such game' });
+    const folder = path.join(DATA_DIR, game.stagedPath.replace(/\.vcd$/i, ''));
+    const files = (await fsp.readdir(folder).catch(() => [] as string[])).filter(isValidFixFile).sort();
+    return {
+      title: game.title,
+      ps1: game.console === 'ps1',
+      overclock: game.console === 'ps1' ? getOverclock(game.stagedPath) : 0,
+      levels: OC_LEVELS,
+      fixLabel: gameFixLabel(oplId(game.serial)),
+      files,
+    };
+  });
+
+  // Remove one fix file from a game's folder (the modal's per-file "remove").
+  app.post<{ Params: { id: string }; Body: { name?: string } }>('/api/games/:id/patch/remove', async (req, reply) => {
+    const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
+    if (!game) return reply.code(404).send({ error: 'no such game' });
+    const name = path.basename(String(req.body?.name || '')).toUpperCase();
+    if (!isValidFixFile(name)) return reply.code(400).send({ error: 'not a fix file' });
+    const folder = path.join(DATA_DIR, game.stagedPath.replace(/\.vcd$/i, ''));
+    await fsp.rm(path.join(folder, name), { force: true }).catch(() => {});
+    return { removed: name };
   });
 
   // Apply the curated bundled fix for a PS1 game (if one exists for its boot id).

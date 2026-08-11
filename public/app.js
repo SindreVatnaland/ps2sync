@@ -802,73 +802,8 @@ document.addEventListener("click", async function (e) {
     return;
   }
 
-  if (action === "patch") {
-    // Pick a patch file (CHEATS.TXT / PATCH_#.BIN / TROJAN_#.BIN) and drop it into the
-    // game's POPS folder over the API. POPStarter reads it on next launch.
-    var inp = document.getElementById("patch-file");
-    if (!inp) {
-      inp = document.createElement("input");
-      inp.type = "file";
-      inp.id = "patch-file";
-      inp.multiple = true;
-      inp.style.display = "none";
-      document.body.appendChild(inp);
-    }
-    inp.value = "";
-    inp.onchange = async function () {
-      if (!inp.files || !inp.files.length) return;
-      var fd = new FormData();
-      for (var i = 0; i < inp.files.length; i++) fd.append("file", inp.files[i]);
-      btn.disabled = true;
-      try {
-        var res = await fetch("/api/games/" + id + "/patch", {
-          method: "POST",
-          body: fd,
-        });
-        var j = await res.json();
-        if (!res.ok) throw new Error(j.error || res.status);
-        alert(
-          'Patch uploaded to "' +
-            name +
-            '": ' +
-            (j.saved || []).join(", ") +
-            "\nLaunch the game to apply.",
-        );
-      } catch (err) {
-        alert("Patch upload failed: " + err);
-      } finally {
-        btn.disabled = false;
-      }
-    };
-    inp.click();
-    return;
-  }
-
-  if (action === "fix") {
-    if (
-      !confirm(
-        'Apply the bundled fix to "' +
-          name +
-          '"? Drops POPStarter fix files into the game folder. Relaunch the game to apply.',
-      )
-    )
-      return;
-    btn.disabled = true;
-    try {
-      var fres = await fetch("/api/games/" + id + "/fix", {
-        method: "POST",
-        headers: { accept: "application/json" },
-      });
-      var fj = await fres.json();
-      if (!fres.ok) throw new Error(fj.error || fres.status);
-      alert(
-        'Applied fix to "' + name + '": ' + (fj.saved || []).join(", ") + "\nRelaunch the game.",
-      );
-    } catch (err) {
-      alert("Apply fix failed: " + err);
-    } finally {
-      btn.disabled = false;
-    }
+  if (action === "tweaks") {
+    openTweaks(id, name);
     return;
   }
 
@@ -894,27 +829,98 @@ document.addEventListener("click", async function (e) {
   }
 });
 
-// PS1 overclock dropdown: writes/removes the game's TROJAN_2.BIN via the API.
-document.addEventListener("change", async function (e) {
-  var sel = e.target;
-  if (!sel || !sel.dataset || sel.dataset.action !== "overclock") return;
-  var id = sel.dataset.id;
-  var level = parseInt(sel.value, 10) || 0;
-  sel.disabled = true;
-  try {
-    var res = await fetch("/api/games/" + id + "/overclock", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ level: level }),
-    });
-    var j = await res.json();
-    if (!res.ok) throw new Error(j.error || res.status);
-  } catch (err) {
-    alert("Overclock change failed: " + err);
-  } finally {
-    sel.disabled = false;
+// --- per-game Tweaks modal (overclock / bundled fix / fix files) -------------
+function twEsc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+function twPost(url, body) {
+  return fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+}
+
+function openTweaks(id, title) {
+  var bg = document.createElement("div");
+  bg.className = "modal-bg";
+  bg.innerHTML = '<div class="modal"><p class="muted">Loading…</p></div>';
+  bg.addEventListener("click", function (e) { if (e.target === bg) bg.remove(); });
+  document.body.appendChild(bg);
+  var box = bg.querySelector(".modal");
+
+  async function refresh() {
+    try {
+      var r = await fetch("/api/games/" + id + "/fixes", { headers: { accept: "application/json" } });
+      var s = await r.json();
+      if (!r.ok) throw new Error(s.error || r.status);
+      render(s);
+    } catch (err) {
+      box.innerHTML =
+        "<h3>Tweaks</h3><p style=\"color:var(--danger)\">Failed: " + twEsc(err.message || err) + "</p>" +
+        '<div class="mclose"><button class="btn" id="tw-x">Close</button></div>';
+      box.querySelector("#tw-x").onclick = function () { bg.remove(); };
+    }
   }
-});
+
+  function render(s) {
+    var oc = "";
+    if (s.ps1) {
+      var opts = '<option value="0"' + (s.overclock === 0 ? " selected" : "") + ">off</option>";
+      (s.levels || []).forEach(function (l) {
+        opts += '<option value="' + l + '"' + (s.overclock === l ? " selected" : "") + ">+" + l + "%</option>";
+      });
+      oc =
+        '<div class="mrow"><span>CPU overclock<br><span class="muted small">smooths stutter; too high can break saves</span></span>' +
+        '<select id="tw-oc">' + opts + "</select></div>";
+    }
+    var fix = s.fixLabel
+      ? '<div class="mrow"><span>Bundled fix<br><span class="muted small">' + twEsc(s.fixLabel) + "</span></span>" +
+        '<button class="btn small primary" id="tw-fix">Apply</button></div>'
+      : "";
+    var files = (s.files && s.files.length)
+      ? s.files.map(function (f) {
+          return '<div class="mrow"><code>' + twEsc(f) + '</code><button class="btn small danger" data-rm="' + twEsc(f) + '">Remove</button></div>';
+        }).join("")
+      : '<p class="muted small">None applied.</p>';
+    box.innerHTML =
+      "<h3>Tweaks — " + twEsc(title) + "</h3>" + oc + fix +
+      "<h4>Applied fix files</h4>" + files +
+      '<div class="mrow"><span>Upload fix file<br><span class="muted small">CHEATS.TXT / PATCH_#.BIN / TROJAN_#.BIN</span></span>' +
+      '<span><input type="file" id="tw-up" multiple> <button class="btn small" id="tw-upbtn">Upload</button></span></div>' +
+      '<p class="muted small">Relaunch the game to apply changes.</p>' +
+      '<div class="mclose"><button class="btn" id="tw-close">Close</button></div>';
+
+    box.querySelector("#tw-close").onclick = function () { bg.remove(); };
+    var ocSel = box.querySelector("#tw-oc");
+    if (ocSel) ocSel.onchange = async function () {
+      ocSel.disabled = true;
+      await twPost("/api/games/" + id + "/overclock", { level: parseInt(ocSel.value, 10) || 0 });
+      refresh();
+    };
+    var fixBtn = box.querySelector("#tw-fix");
+    if (fixBtn) fixBtn.onclick = async function () {
+      fixBtn.disabled = true;
+      var r = await fetch("/api/games/" + id + "/fix", { method: "POST", headers: { accept: "application/json" } });
+      var j = await r.json();
+      if (!r.ok) { alert(j.error || "failed"); fixBtn.disabled = false; return; }
+      refresh();
+    };
+    box.querySelectorAll("[data-rm]").forEach(function (b) {
+      b.onclick = async function () {
+        b.disabled = true;
+        await twPost("/api/games/" + id + "/patch/remove", { name: b.getAttribute("data-rm") });
+        refresh();
+      };
+    });
+    box.querySelector("#tw-upbtn").onclick = async function () {
+      var inp = box.querySelector("#tw-up");
+      if (!inp.files || !inp.files.length) { alert("Pick a file first."); return; }
+      var fd = new FormData();
+      for (var i = 0; i < inp.files.length; i++) fd.append("file", inp.files[i]);
+      var r = await fetch("/api/games/" + id + "/patch", { method: "POST", body: fd });
+      var j = await r.json();
+      if (!r.ok) { alert(j.error || "upload failed"); return; }
+      refresh();
+    };
+  }
+
+  refresh();
+}
 
 // --- library filter + click-to-sort (Library page) ---------------------------
 

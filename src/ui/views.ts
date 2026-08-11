@@ -2,8 +2,6 @@
 // takes data and returns markup. Dynamic tables (jobs) render a shell that
 // public/app.js fills by polling; static content is rendered here.
 import { escapeHtml } from './layout.js';
-import { getOverclock, gameFixLabel, OC_LEVELS } from '../lib/fixes.js';
-import { oplId } from '../lib/art.js';
 import type { Game } from '../db/schema.js';
 
 // --- small formatting helpers ------------------------------------------------
@@ -43,22 +41,12 @@ function libraryTable(consoleLabel: string, rows: Game[]): string {
       const title = escapeHtml(g.title || g.serial);
       const id = escapeHtml(g.id);
       const del = `<button class="btn small danger" data-action="delete" data-id="${id}" data-title="${title}">Delete</button>`;
-      // PS1 only: overclock dropdown + one-click curated fix + manual fix upload.
-      let ps1Extra = '';
-      let patch = '';
-      if (g.console === 'ps1') {
-        patch = `<button class="btn small" data-action="patch" data-id="${id}" data-title="${title}" title="Upload a POPStarter fix file (CHEATS.TXT / PATCH_#.BIN / TROJAN_#.BIN)">Patch</button>`;
-        const cur = getOverclock(g.stagedPath); // 0 = off, -1 = an unrecognised TROJAN_2.BIN
-        const opts = [`<option value="0"${cur === 0 ? ' selected' : ''}>OC: off</option>`]
-          .concat(OC_LEVELS.map((l) => `<option value="${l}"${cur === l ? ' selected' : ''}>OC +${l}%</option>`))
-          .concat(cur === -1 ? ['<option value="0" selected>OC: custom</option>'] : []);
-        const oc = `<select class="btn small" data-action="overclock" data-id="${id}" title="CPU overclock — smooths PS1 stutter/slowdown">${opts.join('')}</select>`;
-        const fixLbl = gameFixLabel(oplId(g.serial));
-        const fix = fixLbl
-          ? `<button class="btn small primary" data-action="fix" data-id="${id}" data-title="${title}" title="${escapeHtml(fixLbl)}">Apply fix</button>`
+      // PS1 only: a single "Tweaks" button opens a modal (overclock, bundled fix,
+      // fix-file upload/remove). Keeps the table uncluttered.
+      const tweaks =
+        g.console === 'ps1'
+          ? `<button class="btn small" data-action="tweaks" data-id="${id}" data-title="${title}" title="Overclock, fixes & patches">Tweaks</button>`
           : '';
-        ps1Extra = `${fix}${oc}`;
-      }
       const search = escapeHtml(`${g.title} ${g.serial}`.toLowerCase());
       return `<tr data-row data-search="${search}">
   <td><img class="cover-sm" data-cover data-console="${escapeHtml(g.console)}" data-serial="${escapeHtml(g.serial)}" data-title="${escapeHtml(g.title)}" alt="">${title}</td>
@@ -66,7 +54,7 @@ function libraryTable(consoleLabel: string, rows: Game[]): string {
   <td>${escapeHtml(fmtMedia(g))}</td>
   <td data-value="${g.sizeBytes}">${fmtBytes(g.sizeBytes)}</td>
   <td data-value="${g.createdAt}">${escapeHtml(fmtDate(g.createdAt))}</td>
-  <td><div class="row-actions">${ps1Extra}${patch}${del}</div></td>
+  <td><div class="row-actions">${tweaks}${del}</div></td>
 </tr>`;
     })
     .join('\n');
