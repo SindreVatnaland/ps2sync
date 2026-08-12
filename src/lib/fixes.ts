@@ -79,6 +79,58 @@ export async function applyGameFix(stagedPath: string, oplId: string): Promise<s
   return written;
 }
 
+// Toggleable POPStarter CHEATS.TXT commands surfaced as checkboxes in the Tweaks modal.
+// Whitelisted so the API can't inject arbitrary lines into a game's config.
+export const CHEAT_TOGGLES: { cmd: string; label: string }[] = [
+  { cmd: '$COMPATIBILITY_0x04', label: 'Smooth CDDA audio — fixes PS1 music lag/slowdown when streaming' },
+];
+
+const cheatsFile = (stagedPath: string): string => path.join(gameFolder(stagedPath), 'CHEATS.TXT');
+
+// Pure line-merge: add/remove `cmd` in CHEATS.TXT text, preserving any other lines
+// (game fixes, GameShark codes) and trimming trailing blanks. Returns null when nothing
+// meaningful is left (caller deletes the file).
+export function mergeCheatLines(existing: string, cmd: string, on: boolean): string | null {
+  const lines = existing.split(/\r?\n/).filter((l) => l.trim() !== cmd);
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop(); // trim trailing blanks first
+  if (on) lines.push(cmd); // so the command lands right after the last real line
+  while (lines.length && lines[0].trim() === '') lines.shift(); // trim leading blanks
+  return lines.some((l) => l.trim() !== '') ? lines.join('\n') + '\n' : null;
+}
+
+// Which whitelisted toggle commands are active in a game's CHEATS.TXT (sync, for render).
+export function getCheats(stagedPath: string): string[] {
+  let txt: string;
+  try {
+    txt = readFileSync(cheatsFile(stagedPath), 'utf8');
+  } catch {
+    return [];
+  }
+  const lines = new Set(txt.split(/\r?\n/).map((l) => l.trim()));
+  return CHEAT_TOGGLES.filter((t) => lines.has(t.cmd)).map((t) => t.cmd);
+}
+
+// Add (on) or remove (off) a whitelisted cheat command in a game's CHEATS.TXT.
+export async function setCheat(stagedPath: string, cmd: string, on: boolean): Promise<void> {
+  if (!CHEAT_TOGGLES.some((t) => t.cmd === cmd)) throw new Error(`unknown cheat: ${cmd}`);
+  const dir = gameFolder(stagedPath);
+  const f = path.join(dir, 'CHEATS.TXT');
+  let existing = '';
+  try {
+    existing = await fsp.readFile(f, 'utf8');
+  } catch {
+    /* new file */
+  }
+  const merged = mergeCheatLines(existing, cmd, on);
+  if (merged === null) {
+    await fsp.rm(f, { force: true }).catch(() => {});
+    return;
+  }
+  await fsp.mkdir(dir, { recursive: true });
+  await fsp.chmod(dir, 0o777).catch(() => {});
+  await fsp.writeFile(f, merged);
+}
+
 // Self-check: `tsx fixes.ts`. Pure logic + embedded data only — no filesystem.
 if (import.meta.url === `file://${process.argv[1]}`) {
   assert.equal(isValidFixFile('CHEATS.TXT'), true);
@@ -90,5 +142,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   assert.equal(new Set(Object.values(OC_BLOBS)).size, OC_LEVELS.length); // every level a distinct blob
   assert.ok(gameFixLabel('SCUS_941.63')); // FFVII curated fix present
   assert.equal(gameFixLabel('XXXX_000.00'), null);
+  // cheat line-merge: add to empty, remove to empty, and preserve/only-touch its own line
+  assert.equal(mergeCheatLines('', '$COMPATIBILITY_0x04', true), '$COMPATIBILITY_0x04\n');
+  assert.equal(mergeCheatLines('$COMPATIBILITY_0x04\n', '$COMPATIBILITY_0x04', false), null);
+  assert.equal(mergeCheatLines('$SAFEMODE\n', '$COMPATIBILITY_0x04', true), '$SAFEMODE\n$COMPATIBILITY_0x04\n');
+  assert.equal(mergeCheatLines('$SAFEMODE\n$COMPATIBILITY_0x04\n', '$COMPATIBILITY_0x04', false), '$SAFEMODE\n');
   console.log('fixes self-check ok');
 }

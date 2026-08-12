@@ -872,13 +872,22 @@ function openTweaks(id, title) {
       ? '<div class="mrow"><span>Bundled fix<br><span class="muted small">' + twEsc(s.fixLabel) + "</span></span>" +
         '<button class="btn small primary" id="tw-fix">Apply</button></div>'
       : "";
+    var cheats = "";
+    if (s.ps1 && s.cheats && s.cheats.length) {
+      var active = s.activeCheats || [];
+      cheats = "<h4>Compatibility fixes</h4>" + s.cheats.map(function (c) {
+        var on = active.indexOf(c.cmd) >= 0;
+        return '<label class="mrow" style="cursor:pointer"><span>' + twEsc(c.label) + "</span>" +
+          '<input type="checkbox" data-cheat="' + twEsc(c.cmd) + '"' + (on ? " checked" : "") + ' style="width:auto"></label>';
+      }).join("");
+    }
     var files = (s.files && s.files.length)
       ? s.files.map(function (f) {
           return '<div class="mrow"><code>' + twEsc(f) + '</code><button class="btn small danger" data-rm="' + twEsc(f) + '">Remove</button></div>';
         }).join("")
       : '<p class="muted small">None applied.</p>';
     box.innerHTML =
-      "<h3>Tweaks — " + twEsc(title) + "</h3>" + oc + fix +
+      "<h3>Tweaks — " + twEsc(title) + "</h3>" + oc + fix + cheats +
       "<h4>Applied fix files</h4>" + files +
       '<div class="mrow"><span>Upload fix file<br><span class="muted small">CHEATS.TXT / PATCH_#.BIN / TROJAN_#.BIN</span></span>' +
       '<span><input type="file" id="tw-up" multiple> <button class="btn small" id="tw-upbtn">Upload</button></span></div>' +
@@ -904,6 +913,13 @@ function openTweaks(id, title) {
       b.onclick = async function () {
         b.disabled = true;
         await twPost("/api/games/" + id + "/patch/remove", { name: b.getAttribute("data-rm") });
+        refresh();
+      };
+    });
+    box.querySelectorAll("[data-cheat]").forEach(function (cb) {
+      cb.onchange = async function () {
+        cb.disabled = true;
+        await twPost("/api/games/" + id + "/cheat", { command: cb.getAttribute("data-cheat"), on: cb.checked });
         refresh();
       };
     });

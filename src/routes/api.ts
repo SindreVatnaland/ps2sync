@@ -11,7 +11,7 @@ import { games, jobs as jobsTable } from '../db/schema.js';
 import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
 import { deleteGame, purgeSmallPs1, refreshCoverArt } from '../lib/place.js';
-import { setOverclock, getOverclock, applyGameFix, gameFixLabel, isValidFixFile, OC_LEVELS } from '../lib/fixes.js';
+import { setOverclock, getOverclock, applyGameFix, gameFixLabel, isValidFixFile, OC_LEVELS, CHEAT_TOGGLES, getCheats, setCheat } from '../lib/fixes.js';
 import { oplId } from '../lib/art.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp, CATALOG } from '../lib/apps.js';
@@ -124,8 +124,25 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
       overclock: game.console === 'ps1' ? getOverclock(game.stagedPath) : 0,
       levels: OC_LEVELS,
       fixLabel: gameFixLabel(oplId(game.serial)),
+      cheats: CHEAT_TOGGLES,
+      activeCheats: game.console === 'ps1' ? getCheats(game.stagedPath) : [],
       files,
     };
+  });
+
+  // Toggle a whitelisted CHEATS.TXT command (e.g. the CDDA audio fix) on/off for a game.
+  app.post<{ Params: { id: string }; Body: { command?: string; on?: boolean } }>('/api/games/:id/cheat', async (req, reply) => {
+    const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
+    if (!game) return reply.code(404).send({ error: 'no such game' });
+    if (game.console !== 'ps1') return reply.code(400).send({ error: 'cheats are PS1-only (POPStarter)' });
+    const command = String(req.body?.command || '');
+    const on = !!req.body?.on;
+    try {
+      await setCheat(game.stagedPath, command, on);
+    } catch (err) {
+      return reply.code(400).send({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return { command, on };
   });
 
   // Remove one fix file from a game's folder (the modal's per-file "remove").
