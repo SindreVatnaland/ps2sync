@@ -89,6 +89,13 @@ export async function backupAllVmcs(): Promise<number> {
 export async function resetGameVmc(stagedPath: string): Promise<void> {
   await backupGameVmc(stagedPath);
   const dir = gameFolder(stagedPath);
+  // Save-safety: never delete a SLOT0 that holds a save unless a backup actually exists.
+  // (backup is best-effort; if it silently failed and there's no prior copy, refuse.)
+  const slot0 = await fsp.readFile(path.join(dir, 'SLOT0.VMC')).catch(() => null);
+  const hasSave = !!slot0 && isFormatted(slot0) && vmcHasSave(slot0);
+  if (hasSave && (await listBackups(stagedPath, 'SLOT0.VMC')).length === 0) {
+    throw new Error('refusing to reset: the card has a save but no backup could be made — try again');
+  }
   for (const slot of SLOTS) await fsp.rm(path.join(dir, slot), { force: true }).catch(() => {});
 }
 

@@ -138,7 +138,11 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
     const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
     if (!game) return reply.code(404).send({ error: 'no such game' });
     if (game.console !== 'ps1') return reply.code(400).send({ error: 'VMC reset is PS1-only (POPStarter)' });
-    await resetGameVmc(game.stagedPath);
+    try {
+      await resetGameVmc(game.stagedPath);
+    } catch (err) {
+      return reply.code(400).send({ error: err instanceof Error ? err.message : String(err) });
+    }
     return { reset: true };
   });
 
