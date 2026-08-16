@@ -25,7 +25,8 @@ const exists = (p: string): Promise<boolean> => access(p).then(() => true).catch
 const COVER_WIDTH = 256;
 function resizeCover(buf: Buffer): Promise<Buffer> {
   return new Promise((resolve) => {
-    const gm = spawn('gm', ['convert', 'png:-', '-resize', `${COVER_WIDTH}x`, '-strip', '-type', 'TrueColorMatte', 'png:-']);
+    // input '-' (not 'png:-') so gm auto-detects the source format — xlenore covers are JPG.
+    const gm = spawn('gm', ['convert', '-', '-resize', `${COVER_WIDTH}x`, '-strip', '-type', 'TrueColorMatte', 'png:-']);
     const out: Buffer[] = [];
     gm.stdout.on('data', (d: Buffer) => out.push(d));
     gm.on('error', () => resolve(buf)); // gm not installed -> keep original
@@ -139,18 +140,39 @@ async function findBoxart(title: string, serial: string, console: Console): Prom
   return matches.find((n) => n.toLowerCase().includes(`(${rl}`)) ?? matches.find((n) => n.toLowerCase().includes('(usa')) ?? matches[0];
 }
 
+// Raw cover bytes for a disc. Try xlenore's serial-keyed covers first — an exact match by
+// disc serial, so it works even for titles libretro doesn't index the same way (e.g.
+// "Disney's Tarzan"/"Disney's Hercules"). Fall back to libretro boxart by normalised title.
+// Returns bytes (jpg or png) or null; resizeCover normalises the format afterwards.
+async function fetchCover(serial: string, title: string, console: Console): Promise<Buffer | null> {
+  const repo = console === 'ps1' ? 'psx-covers' : 'ps2-covers';
+  const xl = `https://cdn.jsdelivr.net/gh/xlenore/${repo}@main/covers/default/${encodeURIComponent(serial.toUpperCase())}.jpg`;
+  try {
+    const r = await fetch(xl, { headers: { 'user-agent': 'ps2sync' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (r.ok) return Buffer.from(await r.arrayBuffer());
+  } catch {
+    /* fall through to libretro */
+  }
+  const name = await findBoxart(title, serial, console);
+  if (!name) return null;
+  const url = `https://thumbnails.libretro.com/${encodeURIComponent(sysName(console))}/Named_Boxarts/${encodeURIComponent(name)}.png`;
+  try {
+    const r = await fetch(url, { headers: { 'user-agent': 'ps2sync' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (r.ok) return Buffer.from(await r.arrayBuffer());
+  } catch {
+    /* no cover */
+  }
+  return null;
+}
+
 // Fetch a cover for (serial, title) and write ART/<BOOT_ID>_COV.png. Skips if present.
 // Never throws — call it fire-and-forget from placement.
 export async function ensureCoverArt(serial: string, title: string, console: Console): Promise<void> {
   try {
     const dest = path.join(artDir, `${oplId(serial)}_COV.png`);
     if (await exists(dest)) return; // already have art
-    const name = await findBoxart(title, serial, console);
-    if (!name) return; // no matching cover in the index
-    const url = `https://thumbnails.libretro.com/${encodeURIComponent(sysName(console))}/Named_Boxarts/${encodeURIComponent(name)}.png`;
-    const res = await fetch(url, { headers: { 'user-agent': 'ps2sync' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!res.ok) return;
-    const buf = Buffer.from(await res.arrayBuffer());
+    const buf = await fetchCover(serial, title, console);
+    if (!buf) return; // no cover found from either source
     await mkdir(artDir, { recursive: true });
     await writeFile(dest, await resizeCover(buf));
   } catch {
