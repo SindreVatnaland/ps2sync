@@ -12,6 +12,7 @@ import * as gamedb from '../lib/gamedb.js';
 import * as jobs from '../lib/jobs.js';
 import { deleteGame, purgeSmallPs1, refreshCoverArt } from '../lib/place.js';
 import { setOverclock, getOverclock, applyGameFix, gameFixLabel, isValidFixFile, OC_LEVELS, CHEAT_TOGGLES, getCheats, setCheat } from '../lib/fixes.js';
+import { vmcStatus, resetGameVmc, restoreGameVmc } from '../lib/vmc.js';
 import { oplId } from '../lib/art.js';
 import { storageSummary } from '../lib/storage.js';
 import { listApps, checkApps, installApp, CATALOG } from '../lib/apps.js';
@@ -126,8 +127,29 @@ export async function apiRoutes(app: FastifyInstance): Promise<void> {
       fixLabel: gameFixLabel(oplId(game.serial)),
       cheats: CHEAT_TOGGLES,
       activeCheats: game.console === 'ps1' ? getCheats(game.stagedPath) : [],
+      vmc: await vmcStatus(game.stagedPath), // PS1-only meaning; harmless otherwise
       files,
     };
+  });
+
+  // "Fix card (no-detect)": back up the save, then delete the VMCs so POPStarter
+  // rebuilds fresh ones — cures the "no memory card" bug. PS1 only.
+  app.post<{ Params: { id: string } }>('/api/games/:id/vmc/reset', async (req, reply) => {
+    const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
+    if (!game) return reply.code(404).send({ error: 'no such game' });
+    if (game.console !== 'ps1') return reply.code(400).send({ error: 'VMC reset is PS1-only (POPStarter)' });
+    await resetGameVmc(game.stagedPath);
+    return { reset: true };
+  });
+
+  // Restore the newest SLOT0 backup into the game folder. PS1 only.
+  app.post<{ Params: { id: string } }>('/api/games/:id/vmc/restore', async (req, reply) => {
+    const game = db.select().from(games).where(eq(games.id, req.params.id)).get();
+    if (!game) return reply.code(404).send({ error: 'no such game' });
+    if (game.console !== 'ps1') return reply.code(400).send({ error: 'VMC restore is PS1-only (POPStarter)' });
+    const f = await restoreGameVmc(game.stagedPath);
+    if (!f) return reply.code(404).send({ error: 'no backup' });
+    return { restored: f };
   });
 
   // Toggle a whitelisted CHEATS.TXT command (e.g. the CDDA audio fix) on/off for a game.

@@ -834,6 +834,17 @@ function twEsc(s) { var d = document.createElement("div"); d.textContent = s == 
 function twPost(url, body) {
   return fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }
+// Rough "3h ago" style relative time from a ms timestamp.
+function twRel(ms) {
+  if (!ms) return "never";
+  var s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  var m = s / 60;
+  if (m < 60) return Math.round(m) + " min ago";
+  var h = m / 60;
+  if (h < 24) return Math.round(h) + "h ago";
+  return Math.round(h / 24) + "d ago";
+}
 
 function openTweaks(id, title) {
   var bg = document.createElement("div");
@@ -881,13 +892,25 @@ function openTweaks(id, title) {
           '<input type="checkbox" data-cheat="' + twEsc(c.cmd) + '"' + (on ? " checked" : "") + ' style="width:auto"></label>';
       }).join("");
     }
+    var mc = "";
+    if (s.ps1 && s.vmc) {
+      var v = s.vmc;
+      var state = v.hasSave
+        ? "Has a save · " + v.backups + " backup" + (v.backups === 1 ? "" : "s") +
+          (v.lastBackup ? " · last backed up " + twRel(v.lastBackup) : "")
+        : "No save yet";
+      mc = "<h4>Memory card</h4>" +
+        '<div class="mrow"><span>' + twEsc(state) + "</span>" +
+        '<span><button class="btn small" id="tw-vmc-reset">Fix card (no-detect)</button> ' +
+        '<button class="btn small" id="tw-vmc-restore">Restore save</button></span></div>';
+    }
     var files = (s.files && s.files.length)
       ? s.files.map(function (f) {
           return '<div class="mrow"><code>' + twEsc(f) + '</code><button class="btn small danger" data-rm="' + twEsc(f) + '">Remove</button></div>';
         }).join("")
       : '<p class="muted small">None applied.</p>';
     box.innerHTML =
-      "<h3>Tweaks — " + twEsc(title) + "</h3>" + oc + fix + cheats +
+      "<h3>Tweaks — " + twEsc(title) + "</h3>" + oc + fix + cheats + mc +
       "<h4>Applied fix files</h4>" + files +
       '<div class="mrow"><span>Upload fix file<br><span class="muted small">CHEATS.TXT / PATCH_#.BIN / TROJAN_#.BIN</span></span>' +
       '<span><input type="file" id="tw-up" multiple> <button class="btn small" id="tw-upbtn">Upload</button></span></div>' +
@@ -923,6 +946,25 @@ function openTweaks(id, title) {
         refresh();
       };
     });
+    var vmcReset = box.querySelector("#tw-vmc-reset");
+    if (vmcReset) vmcReset.onclick = async function () {
+      if (!confirm("This deletes the card so POPStarter rebuilds it — fixes 'no memory card'. Your save is backed up first. After: launch the game on the PS2, come back and click 'Restore save', then launch again.")) return;
+      vmcReset.disabled = true;
+      var r = await twPost("/api/games/" + id + "/vmc/reset", {});
+      var j = await r.json();
+      if (!r.ok) { alert(j.error || "failed"); vmcReset.disabled = false; return; }
+      alert("Card reset. Now: 1) launch the game on the PS2 so POPStarter rebuilds the card, 2) come back and click 'Restore save', 3) launch again — your save should be back.");
+      refresh();
+    };
+    var vmcRestore = box.querySelector("#tw-vmc-restore");
+    if (vmcRestore) vmcRestore.onclick = async function () {
+      vmcRestore.disabled = true;
+      var r = await twPost("/api/games/" + id + "/vmc/restore", {});
+      var j = await r.json();
+      if (!r.ok) { alert(j.error || "failed"); vmcRestore.disabled = false; return; }
+      alert("Restored save from backup " + j.restored + ". Launch the game to check it mounts.");
+      refresh();
+    };
     box.querySelector("#tw-upbtn").onclick = async function () {
       var inp = box.querySelector("#tw-up");
       if (!inp.files || !inp.files.length) { alert("Pick a file first."); return; }

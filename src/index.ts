@@ -10,6 +10,7 @@ import { reconcileNames, reconcileImages } from './lib/place.js';
 import { autoUpdateApps, writeConfApps } from './lib/apps.js';
 import { reconcilePs1Launchers } from './lib/pops.js';
 import { getAppsAutoUpdate } from './lib/settings.js';
+import { backupAllVmcs } from './lib/vmc.js';
 import { buildServer } from './server.js';
 
 async function main(): Promise<void> {
@@ -28,6 +29,11 @@ async function main(): Promise<void> {
   };
   autoUpdate();
   setInterval(autoUpdate, 12 * 60 * 60 * 1000).unref();
+
+  // Back up PS1 VMC saves once at boot, then every 30 min. Guards against the
+  // POPStarter-over-SMB "no memory card" bug so a reset can always restore the save.
+  void backupAllVmcs();
+  setInterval(() => void backupAllVmcs(), 30 * 60 * 1000).unref();
 
   const app = buildServer();
   await app.listen({ host: '0.0.0.0', port: config.PORT });
