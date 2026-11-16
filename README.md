@@ -83,7 +83,7 @@ app has the PS2 steps below, with download links.
 ### When something's off
 
 - **OPL can't connect to the SMB server.** Check the SMB server IP, and that the PS2's
-  cable is in. If it still fails, see the server troubleshooting below.
+  cable is in. If it still fails, ask Claude Code to check the server (see below).
 - **Every PS1 game suddenly says "no memory card"**, usually right after the server
   restarted. The PS2 is holding a dead network session. **Fully power the PS2 off and on.**
   Your saves are fine.
@@ -94,169 +94,45 @@ app has the PS2 steps below, with download links.
 
 ## Server setup (for Claude Code)
 
-> **For Claude Code:** you're setting up ps2sync on the user's Linux server, either on
-> the box itself or over SSH. Do the steps in order, and run each **Verify** before moving
-> on. Ask the user only where it says **ASK**. Everything else has a default, so use it.
-> When you're done, tell the user their upload URL ([step 7](#7-hand-over)).
->
-> **Goal:** a local-only box with no Tailscale, reverse proxy or internet exposure. It
-> starts by itself when powered on, and the user uploads games at `http://ps2sync.local`.
+> **For Claude Code:** set up ps2sync on the user's Linux server. What follows covers what's
+> specific to this app: the two services, their config, and the traps. Handle the general
+> Linux work (Docker, disks, networking, hostname) yourself. Ask the user only where it
+> says **ASK**.
 
-### 0. Requirements and decisions
+**Goal:**
 
-- **64-bit ARM (`arm64`) Linux.** The published image
-  `ghcr.io/sindrevatnaland/ps2sync:latest` is arm64-only, so `uname -m` must print
-  `aarch64`. On `x86_64`, use the build-from-source variant in step 5.
-- A Debian/Ubuntu-style OS: apt, systemd, and either NetworkManager or netplan.
+- Local network only.
+- Starts by itself at power-on with nothing to click.
+- The user uploads games at **`http://ps2sync.local`**: hostname `ps2sync`, mDNS/avahi,
+  UI on host port 80.
+- Finish by telling the user that URL. If `.local` doesn't resolve on one of their
+  devices, also give the IP.
 
-**ASK:** how does the PS2 connect?
+**ASK:**
 
-| Option | Pick when | Effect on the server |
-|---|---|---|
-| **A. Through the router** *(simplest)* | The PS2 can be cabled to the router or a switch | No network changes. The server only needs a DHCP reservation |
-| **B. Direct cable PS2 ↔ server** | The PS2 is far from the router. The server sits next to it on Wi-Fi | `eth0` gets a static `10.0.0.1`. Home network and internet stay on Wi-Fi |
+1. Does the PS2 connect through the router, or with a direct cable to the server?
+2. Where should games be stored?
+3. Is it OK to rename the host to `ps2sync`?
 
-**ASK:** where should the games live?
+### Services
 
-- **External USB drive (recommended).** Images are 0.5–8 GB each. The drive must be
-  **ext4**: FAT32 caps files at 4 GB, and exFAT/NTFS have no Unix permissions, which the
-  container needs. Mount point `/mnt/ps2drive`, data dir `/mnt/ps2drive/ps2`.
-- **The internal disk**, for a handful of games. Data dir `/srv/ps2`.
-
-From here on, `DATA` means the chosen data dir.
-
-**ASK:** is it OK to rename the machine's hostname to `ps2sync`? That gives the
-`http://ps2sync.local` address. If not, keep the current hostname, and the URL becomes
-`http://<hostname>.local`.
-
-### 1. Docker (starts at boot)
-
-```sh
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker "$USER"        # re-login afterwards, or use sudo
-sudo systemctl enable --now docker
-```
-
-**Verify:**
-
-- `systemctl is-enabled docker` prints `enabled`.
-- `sudo ss -ltnp | grep -E ':(80|445)\b'` prints nothing.
-  - If `smbd` holds 445, run `sudo systemctl disable --now smbd nmbd`.
-  - If something else holds 80, use `"8080:8080"` in step 5. The URL then gets `:8080`.
-
-### 2. Hostname and `.local` address
-
-```sh
-sudo hostnamectl set-hostname ps2sync         # only if the user said yes
-sudo sed -i "s/^127\.0\.1\.1.*/127.0.1.1\tps2sync/" /etc/hosts
-sudo apt-get install -y avahi-daemon          # mDNS: answers for ps2sync.local
-sudo systemctl enable --now avahi-daemon
-```
-
-**Verify:** from another computer on the network, `ping ps2sync.local` answers. Windows
-10+, macOS, iOS and Linux resolve `.local` names. Some older Android phones don't, so
-they need the IP.
-
-### 3. Storage
-
-**USB drive.**
-
-> ⚠ `mkfs` **erases the drive**. Confirm the device with the user (`lsblk`) first.
-
-```sh
-lsblk                                         # find it, e.g. /dev/sda1
-sudo mkfs.ext4 -L ps2drive /dev/sdX1          # ⚠ ERASES IT
-sudo mkdir -p /mnt/ps2drive
-echo 'LABEL=ps2drive /mnt/ps2drive ext4 defaults,nofail 0 2' | sudo tee -a /etc/fstab
-sudo systemctl daemon-reload && sudo mount -a
-sudo mkdir -p /mnt/ps2drive/ps2
-```
-
-Docker must start only after the drive is mounted. Otherwise games silently land on the
-internal disk:
-
-```sh
-sudo mkdir -p /etc/systemd/system/docker.service.d
-printf '[Unit]\nRequiresMountsFor=/mnt/ps2drive\n' | sudo tee /etc/systemd/system/docker.service.d/wait-for-ps2drive.conf
-sudo systemctl daemon-reload
-```
-
-**Verify:** `df /mnt/ps2drive/ps2` shows the USB device, not the root disk.
-
-**Internal disk.** Run `sudo mkdir -p /srv/ps2`.
-
-In both cases you don't need to chown anything. The container fixes ownership of `DATA`
-on every start.
-
-### 4. Network
-
-**Option A, through the router.** Add a **DHCP reservation** for the server in the
-router's admin page so its IP never changes. `hostname -I` shows the current IP. That IP
-is the **SMB server IP**, so note it for step 6.
-
-**Option B, direct cable.** The setup is:
-
-- Wi-Fi stays on the home network.
-- `eth0` becomes a private two-device link: server `10.0.0.1`, PS2 `10.0.0.2`.
-- **No gateway on `eth0`.** The default route must stay on Wi-Fi.
-- No crossover cable needed.
-
-> Do this while connected **over Wi-Fi**. An SSH session over ethernet will drop.
-
-Find out which network stack is in use: `systemctl is-active NetworkManager`.
-
-**NetworkManager:**
-
-```sh
-nmcli -t -f NAME,DEVICE con show                 # existing eth0 profile?
-sudo nmcli con delete "Wired connection 1"       # only if it exists and is on eth0
-sudo nmcli con add type ethernet ifname eth0 con-name ps2link \
-  ipv4.method manual ipv4.addresses 10.0.0.1/24 ipv4.never-default yes \
-  ipv6.method disabled connection.autoconnect yes
-sudo nmcli con up ps2link    # "no carrier" error is fine while the PS2 is off
-```
-
-**netplan:** create `/etc/netplan/60-ps2link.yaml`, then run
-`sudo chmod 600 /etc/netplan/60-ps2link.yaml && sudo netplan apply`:
+Use this compose file. Replace both `/srv/ps2` with the chosen data dir:
 
 ```yaml
-network:
-  version: 2
-  ethernets:
-    eth0:
-      dhcp4: false
-      addresses: [10.0.0.1/24]
-      optional: true        # don't hold up boot waiting for the PS2
-      ignore-carrier: true  # keep 10.0.0.1 even while the PS2 is off
-```
-
-**Verify:** `ip route | grep default` still points at `wlan0`. With the PS2 on and
-cabled, `ip -4 addr show eth0` shows `10.0.0.1/24`.
-
-### 5. Deploy
-
-Write `/opt/ps2sync/compose.yaml`, with **both** `/srv/ps2` paths replaced by `DATA`:
-
-```yaml
-# ps2sync, local-only: web UI on port 80 + Samba share "PS2" for OPL on 445.
 services:
+  # Web UI: upload, identify, convert, organize.
   ps2sync:
-    image: ghcr.io/sindrevatnaland/ps2sync:latest
+    image: ghcr.io/sindrevatnaland/ps2sync:latest   # arm64 only; else build: <repo clone>
     container_name: ps2sync
-    restart: unless-stopped          # back up after every reboot
+    restart: unless-stopped
     ports:
-      - "80:8080"                    # http://ps2sync.local
+      - "80:8080"
     environment:
       TZ: Europe/Oslo
     volumes:
-      - /srv/ps2:/data               # <- DATA
+      - /srv/ps2:/data
 
-  # The share the PS2 reads from. OPL's SMB client is ancient: force SMB1/NT1 + NTLM.
-  # -s "name;path;browsable;readonly;guest" -> writable guest share "PS2".
-  # Don't add -p: it chowns the folder away from ps2sync and breaks uploads.
-  # 445 is bound on ALL interfaces on purpose. Binding one IP (e.g. 10.0.0.1:445) fails
-  # whenever that IP is missing (PS2 off, link down), and Docker never retries a
-  # container that failed to start, so Samba would stay dead until someone restarts it.
+  # SMB share "PS2" that OPL on the PS2 reads from.
   ps2-samba:
     image: dperson/samba
     container_name: ps2-samba
@@ -266,10 +142,10 @@ services:
     environment:
       TZ: Europe/Oslo
     volumes:
-      - /srv/ps2:/ps2                # <- DATA (same folder)
+      - /srv/ps2:/ps2                # same folder as ps2sync's /data
     command:
       - -s
-      - PS2;/ps2;yes;no;yes
+      - PS2;/ps2;yes;no;yes          # name;path;browsable;readonly;guest
       - -g
       - server min protocol = NT1
       - -g
@@ -278,85 +154,46 @@ services:
       - ntlm auth = yes
 ```
 
-```sh
-sudo mkdir -p /opt/ps2sync    # then write compose.yaml above into it
-cd /opt/ps2sync && sudo docker compose up -d
-```
+### Traps
 
-If the pull fails with `denied`, or the machine is `x86_64`, build from source instead:
+- **Old SMB.** OPL's SMB client is ancient. Keep SMB1/NT1 + NTLM, as in the compose file.
+- **No `-p` on Samba.** It chowns the share away from ps2sync (uid 1000), and uploads then
+  fail with `EACCES`. ps2sync fixes `/data` ownership itself on every start.
+- **Bind 445 on all interfaces**, not a single IP like `10.0.0.1:445`. If that IP is
+  missing when Samba starts (PS2 off, link down, early boot), the bind fails. Docker
+  **never retries a container that failed to start**, so Samba stays dead. If the host
+  already runs another SMB server on 445, stop it. If you have to keep it, pin Samba to
+  the PS2-facing IP *and* make sure that IP stays up without carrier.
+- **Data dir must be ext4** (or another Unix filesystem). FAT32 caps files at 4 GB, and
+  exFAT/NTFS lack the permissions the container needs. On a USB drive, mount it with
+  `nofail` in fstab, and make Docker wait for it (`RequiresMountsFor=` drop-in).
+  Otherwise games silently land on the root disk when the drive mounts late.
+- **Direct cable.** Server `eth0` = `10.0.0.1/24`, PS2 = `10.0.0.2`.
+  - Don't put a gateway on `eth0`. Internet and the home network stay on Wi-Fi.
+  - Keep `10.0.0.1` assigned while the PS2 is off: `ignore-carrier: true` in netplan;
+    NetworkManager's `ipv4.never-default yes` and a static profile.
+  - No crossover cable is needed.
+- **Server LAN IP setting.** ps2sync writes this IP into POPStarter's config, so it must
+  be the IP the **PS2** uses to reach the server: the router-reserved IP, or `10.0.0.1`
+  for a direct cable. Never use the Wi-Fi IP for a direct cable. Set it with:
+  `curl -X POST http://localhost/api/settings -H 'Content-Type: application/json' -d '{"serverLanIp":"<ip>"}'`.
+- **Router setup.** Give the server a DHCP reservation so the SMB IP in OPL never changes.
+- **After Samba restarts, power-cycle the PS2.** Otherwise it holds a dead session, and
+  every PS1 game reports "no memory card".
+- **Security.** It's a guest-writable SMB1 share with an open UI, so keep it LAN-only and
+  never port-forward 80 or 445. Set `AUTH_TOKEN` to password the UI.
 
-1. Run `sudo git clone https://github.com/SindreVatnaland/ps2sync.git /opt/ps2sync/src`.
-2. In `compose.yaml`, replace the `image:` line with `build: ./src`.
-3. Run `sudo docker compose up -d --build`. The first build takes 5–15 minutes.
+### Done when
 
-Then tell ps2sync which IP the **PS2** uses to reach it. The IP goes into POPStarter's
-config, so use the reserved LAN IP for option A, or `10.0.0.1` for option B. For
-option B, never use the Wi-Fi IP:
+- After a **reboot**, both containers are up.
+- `curl -f http://localhost/health` succeeds.
+- `docker port ps2-samba` lists 445.
+- `http://ps2sync.local` opens from another device.
+- For a direct cable: with OPL's network started, the server can ping `10.0.0.2`.
 
-```sh
-curl -fsS -X POST http://localhost/api/settings \
-  -H 'Content-Type: application/json' -d '{"serverLanIp":"<SMB server IP>"}'
-```
+Hand the user the [PS2 table](#setting-up-the-ps2-one-time), filled in with the real IPs.
 
-**Verify:**
-
-```sh
-sudo docker compose -f /opt/ps2sync/compose.yaml ps   # both Up
-curl -fsS http://localhost/health && echo OK
-sudo docker port ps2-samba                            # 445/tcp -> 0.0.0.0:445
-ls DATA                                               # db/ etc. created
-```
-
-Then **reboot** and run the same checks to prove it all comes back on its own.
-
-> **Security:** this is a guest-writable SMB1 share with an open web UI. That's fine
-> inside a home network. **Never** port-forward 80 or 445 on the router. To password the
-> UI, add `AUTH_TOKEN: <secret>` under ps2sync's `environment`.
-
-### 6. PS2 settings
-
-Give the user the [PS2 table](#setting-up-the-ps2-one-time) filled in with the real SMB
-server IP. For option B, also verify the link: with OPL's network started on the PS2,
-`ping -c3 10.0.0.2` from the server should answer.
-
-### 7. Hand over
-
-Tell the user, plainly:
-
-- **Upload games at `http://ps2sync.local`**, or at `http://<reserved IP>` if `.local`
-  doesn't work on a device. Suggest bookmarking it on their phone and laptop.
-- It starts by itself whenever the server is powered on. Nothing needs to be opened.
-
-### Updating
-
-```sh
-cd /opt/ps2sync && sudo docker compose pull && sudo docker compose up -d
-```
-
-For a source build, the update is `sudo git -C src pull && sudo docker compose up -d --build`.
-Afterwards, power-cycle the PS2 so it reconnects.
-
-### Server troubleshooting
-
-- **OPL "cannot connect to SMB server":**
-  1. `docker ps`: is `ps2-samba` up?
-  2. `docker port ps2-samba`: is 445 listed?
-  3. Does `ping <PS2 IP>` answer?
-  4. Option B: does `eth0` have `10.0.0.1`?
-- **A container shows as stopped/inactive after a restart:** check
-  `docker inspect <name> --format '{{.State.Error}}'`. Docker does **not** retry a
-  container whose start failed, for example because a port bind failed. Fix the cause,
-  then run `docker compose up -d`.
-- **"Push config to PS2" times out (option B):** the container reaches `10.0.0.2` through
-  the host's routing. Check `ping 10.0.0.2` and that PS2Net is running. Otherwise, write
-  the two files by hand in wLaunchELF under `mc0:/POPSTARTER/`:
-  - `SMBCONFIG.DAT` containing `10.0.0.1 PS2`
-  - `IPCONFIG.DAT` containing `10.0.0.2 255.255.255.0 10.0.0.1`
-- **Uploads fail with EACCES:** the data dir is on exFAT/NTFS, or someone added `-p` to
-  the Samba command.
-- **Games vanished after a reboot:** the USB drive wasn't mounted when Docker started.
-  Check `df DATA` and the `RequiresMountsFor` drop-in.
-- **Logs:** `docker logs ps2sync --tail 100` and `docker logs ps2-samba --tail 100`.
+**Update:** `docker compose pull && docker compose up -d`, then power-cycle the PS2.
 
 ---
 
@@ -379,7 +216,3 @@ Environment variables for the `ps2sync` container. All of them are optional.
 ```sh
 docker compose up --build     # root docker-compose.yml: app only, ./data, port 8080
 ```
-
-A variant with a Tailscale sidecar lives in
-[`deploy/dockge-compose.yaml`](./deploy/dockge-compose.yaml). CI builds the arm64 image
-and pushes it to GHCR on every push to `main`.
