@@ -78,7 +78,12 @@ jobs:
       - name: Merge per-arch tags into :latest
         run: |
           img="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ps2sync"
-          docker buildx imagetools create -t "$img:latest" "$img:arm64" "$img:x86"
+          # The source annotation on the index links the GHCR package to this repo
+          # (repo sidebar + README on the package page).
+          docker buildx imagetools create -t "$img:latest" \
+            --annotation "index:org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --annotation "index:org.opencontainers.image.description=Upload PS1/PS2 disc images; Open PS2 Loader plays them over SMB" \
+            "$img:arm64" "$img:x86"
           docker buildx imagetools inspect "$img:latest"
 
       # Best-effort: skipped until DEPLOY_TOKEN is set; never fails the build.
