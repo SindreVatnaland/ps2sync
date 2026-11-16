@@ -122,7 +122,7 @@ Use this compose file. Replace both `/srv/ps2` with the chosen data dir:
 services:
   # Web UI: upload, identify, convert, organize.
   ps2sync:
-    image: ghcr.io/sindrevatnaland/ps2sync:latest   # arm64 only; else build: <repo clone>
+    image: ghcr.io/sindrevatnaland/ps2sync:latest   # multi-arch: arm64 + x86_64
     container_name: ps2sync
     restart: unless-stopped
     ports:

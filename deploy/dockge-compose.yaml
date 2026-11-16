@@ -8,8 +8,10 @@
 # over SMB on the LAN — so both containers bind-mount the SAME host directory.
 #
 # Prerequisites:
-#   1. CI has pushed ghcr.io/sindrevatnaland/ps2sync:latest (private image).
-#   2. On the box: docker login ghcr.io -u SindreVatnaland   (PAT with read:packages).
+#   1. CI has pushed ghcr.io/sindrevatnaland/ps2sync:latest (public, arm64 + x86;
+#      no docker login needed).
+#   2. Pi eth0 = static 10.0.0.1/24 via /etc/netplan/60-ps2link.yaml WITH
+#      `ignore-carrier: true` — see the ps2-samba port note below.
 #   3. .env alongside this file:  TS_AUTHKEY=tskey-auth-…  (reusable key).
 #   4. Data lives on the ext4 storage drive mounted at /mnt/bigdisk (images can be
 #      large; ext4 avoids FAT32's 4 GB cap and gives real perms for SQLite). The
@@ -38,14 +40,17 @@ services:
       TZ: Europe/Oslo
       # AUTH_TOKEN: ...          # optional shared token for the UI
     volumes:
-      - /mnt/bigdisk/ps2:/data               # ext4 storage drive: DB + games together
-    networks: [web]
+      - /mnt/bigdisk/ps2:/data # ext4 storage drive: DB + games together
+    networks:
+      web:
+        gw_priority: 100
+      ps2link:
+        ipv4_address: 10.0.0.16
     labels:
-      homelab.name: "PS2 Sync"
+      homelab.name: PS2 Sync
       homelab.url: https://ps2sync.tailcd7b6f.ts.net/
-      homelab.desc: "Ingest & organize PS1/PS2 images for OPL (the PS2 pulls over SMB)"
+      homelab.desc: Ingest & organize PS1/PS2 images for OPL (the PS2 pulls over SMB)
       com.centurylinklabs.watchtower.enable: "true"
-
   # SMB share the PS2 (Open PS2 Loader) mounts over the LAN. Serves the SAME host
   # dir ps2sync organizes. OPL's SMB client is ancient, so force SMB1/NT1 + NTLM;
   # -s "share;path;browse;readonly;guest" exposes /ps2 as writable guest share PS2.
@@ -57,9 +62,13 @@ services:
     container_name: ps2-samba
     image: dperson/samba
     restart: unless-stopped
+    # Pinned to the PS2 link IP because another SMB server on this Pi already owns
+    # 445 on the Tailscale IP. Catch: if 10.0.0.1 is missing when Samba starts, the
+    # bind fails ("cannot assign requested address") and Docker never retries a failed
+    # start — the stack sits "inactive". systemd-networkd drops 10.0.0.1 whenever eth0
+    # loses carrier (PS2 off), so eth0 needs `ignore-carrier: true` in netplan.
     ports:
-      - "139:139"
-      - "445:445"
+      - 10.0.0.1:445:445
     environment:
       TZ: Europe/Oslo
     volumes:
@@ -67,15 +76,14 @@ services:
     # Explicit list form: each flag and its (space-containing) value is a separate
     # item, so nothing depends on how the runtime word-splits a single string.
     command:
-      - "-s"
-      - "PS2;/ps2;yes;no;yes"          # share PS2 -> /ps2, writable, guest ok (no -p)
-      - "-g"
-      - "server min protocol = NT1"    # OPL's SMB client is ancient — force SMB1/NT1
-      - "-g"
-      - "client min protocol = NT1"
-      - "-g"
-      - "ntlm auth = yes"
-
+      - -s
+      - PS2;/ps2;yes;no;yes # share PS2 -> /ps2, writable, guest ok (no -p)
+      - -g
+      - server min protocol = NT1 # OPL's SMB client is ancient — force SMB1/NT1
+      - -g
+      - client min protocol = NT1
+      - -g
+      - ntlm auth = yes
   # Own tailnet device -> ps2sync.tailcd7b6f.ts.net
   tailscale-ps2sync:
     image: tailscale/tailscale:latest
@@ -86,17 +94,21 @@ services:
       TS_HOSTNAME: ps2sync
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"
-      # containerboot re-applies this funnel config on every start, so the public
-      # https://ps2sync…/ -> zoraxy:80 route survives recreate/state-wipe without
-      # a manual `tailscale funnel` exec. ${TS_CERT_DOMAIN} = this node's own name.
-      TS_SERVE_CONFIG: /config/serve.json
     volumes:
       - ts_ps2sync_state:/var/lib/tailscale
-      - ./serve.json:/config/serve.json:ro
-    networks: [web]
-
+    networks:
+      - web
 networks:
-  web: { external: true, name: web }
-
+  ps2link:
+    driver: macvlan
+    driver_opts:
+      parent: eth0
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+          gateway: 10.0.0.1
+  web:
+    external: true
+    name: web
 volumes:
   ts_ps2sync_state: null

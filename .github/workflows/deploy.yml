@@ -3,7 +3,7 @@ name: deploy
 on:
   push:
     branches: [main]
-    # Docs/deploy-config changes don't affect the image — skip the arm64 build.
+    # Docs/deploy-config changes don't affect the image — skip the build.
     paths-ignore:
       - '**.md'
       - 'deploy/**'
@@ -16,13 +16,21 @@ permissions:
   packages: write
 
 jobs:
-  build-push:
-    # Native arm64 runner — the image only targets arm64 (Pi 5), so building on
-    # arm64 hardware avoids QEMU emulation (the main reason better-sqlite3 +
-    # cue2pops were slow to compile). Billed as arm64 minutes on private repos.
-    runs-on: ubuntu-24.04-arm
-    env:
-      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  # One native build per architecture (no QEMU — better-sqlite3 + cue2pops compile
+  # slowly under emulation). Each pushes its own tag (:arm64 / :x86); the manifest
+  # job below stitches them into a multi-arch :latest.
+  build:
+    name: build (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+          - arch: x86
+            runner: ubuntu-24.04
+            platform: linux/amd64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,13 +52,34 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.img.outputs.name }}:latest
-          # Layer cache across runs: unchanged stages (cue2pops build, npm deps)
-          # restore instead of recompiling. Biggest win after dropping QEMU.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.img.outputs.name }}:${{ matrix.arch }}
+          # Per-arch layer cache so the two builds don't evict each other.
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+  manifest:
+    name: publish :latest (arm64 + x86)
+    needs: build
+    runs-on: ubuntu-24.04
+    env:
+      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge per-arch tags into :latest
+        run: |
+          img="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ps2sync"
+          docker buildx imagetools create -t "$img:latest" "$img:arm64" "$img:x86"
+          docker buildx imagetools inspect "$img:latest"
 
       # Best-effort: skipped until DEPLOY_TOKEN is set; never fails the build.
       - name: Trigger redeploy
