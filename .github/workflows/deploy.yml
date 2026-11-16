@@ -8,6 +8,8 @@ on:
       - '**.md'
       - 'deploy/**'
       - '.gitignore'
+  # Manual rebuild (gh workflow run deploy.yml) for when only ignored paths changed.
+  workflow_dispatch:
 
 permissions:
   contents: read
