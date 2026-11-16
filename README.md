@@ -195,6 +195,40 @@ Hand the user the [PS2 table](#setting-up-the-ps2-one-time), filled in with the 
 
 **Update:** `docker compose pull && docker compose up -d`, then power-cycle the PS2.
 
+### Known issue: Samba stops when the PS2 is off
+
+This applies to direct-cable setups where Samba is pinned to the link IP
+(`10.0.0.1:445`).
+
+**Symptom.** The PS2 can't load games. The stack shows as stopped or "inactive"
+(e.g. in Dockge). Starting it by hand fixes it until the next time.
+
+**Cause.** When `eth0` loses carrier because the PS2 is off, systemd-networkd removes
+`10.0.0.1`. If Samba starts or restarts during that window (an image update, a
+redeploy, a Docker upgrade or a reboot), the bind fails. Docker never retries a
+container that failed to start.
+
+**Confirm:**
+
+```sh
+journalctl -u docker | grep "10.0.0.1:445"    # "cannot assign requested address"
+ip -4 addr show eth0                          # PS2 off: no 10.0.0.1 = this bug
+```
+
+**Fix.** Keep the address on `eth0` without carrier:
+
+```sh
+sudo netplan set ethernets.eth0.ignore-carrier=true   # merges into the existing eth0 config
+sudo netplan get ethernets.eth0                       # expect: addresses 10.0.0.1/24 + ignore-carrier: true
+sudo netplan try                                      # applies; press Enter to keep (auto-reverts in 120 s)
+sudo docker compose up -d                             # in the stack dir: bring Samba back
+ip -4 addr show eth0                                  # with the PS2 OFF: still 10.0.0.1
+```
+
+On NetworkManager hosts, NetworkManager also drops the address on carrier loss. There,
+bind Samba to `445:445` on all interfaces instead. That's the default compose above, and
+it avoids the problem entirely.
+
 ---
 
 ## Configuration
